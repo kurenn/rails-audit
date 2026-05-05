@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#7 — Cluster-level scoping)
+
+- **`--only-cluster=<list>`** and **`--exclude-cluster=<list>`** in SKILL.md "Scope arguments". Accepts cluster letters (`A`/`B`/`C`/`D`) or English aliases (`spec`/`deploy`/`health`/`security`).
+- **Cluster aliases** documented in their own section: A=Spec/Coverage, B=Deploy/CI/Obs+Foundation, C=Code Health (9 dimensions), D=Security/Money/Gov+Authz.
+- **Note on `security` ambiguity**: in `--only` it means the single dimension; in `--only-cluster` it means the broad cluster D. Documented inline.
+- **Mutually-exclusive validation**: at most one of `--only`/`--exclude`/`--only-cluster`/`--exclude-cluster` may be set.
+- Closes #33.
+
 ### Added (v0.3 milestone PR#6 — Tool-output parsers: bin/parse-brakeman, parse-bundle-audit, parse-rubocop)
 
 - **`bin/parse-brakeman`** — read `tmp/rails-audit/brakeman.json`, emit finding stubs ready to merge into `findings[]`. Maps brakeman warning types to dimensions + severity (e.g. SQL Injection → blocker; Format Validation → high; Cross Site Scripting → high). Confidence levels (High/Medium/Weak) modulate severity. Filters known false positives (array-form `Open3.capture3` — argv, no shell). Stable fingerprints prefixed `f-bk-`.

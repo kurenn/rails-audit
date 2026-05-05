@@ -17,13 +17,26 @@ If the user invokes `/rails-audit` with no mode, ask using prompt **P1** in `pro
 
 ## Scope arguments
 
-By default an audit covers all 18 dimensions. Two args narrow the scope:
+By default an audit covers all 18 dimensions. Several args narrow the scope:
 
 - **`--only=<comma-list>`** — run only these dimensions (or aliases). Example: `/rails-audit --only=money,security`.
 - **`--exclude=<comma-list>`** — run all dimensions *except* these. Example: `/rails-audit --exclude=dx-and-cost,observability`.
-- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>`. Example: `/rails-audit money` ≡ `/rails-audit --only=money`.
+- **`--only-cluster=<list>`** (added v0.4) — run only these clusters. Accepts cluster letters (`A`/`B`/`C`/`D`) or English aliases (`spec`/`deploy`/`health`/`security`). Example: `/rails-audit --only-cluster=A,D`.
+- **`--exclude-cluster=<list>`** (added v0.4) — run all clusters except these.
+- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>` (or `--only-cluster=<arg>` if it matches a cluster letter). Example: `/rails-audit money`, `/rails-audit A`.
 
-Mutually exclusive: `--only` and `--exclude` cannot be combined; reject with an error.
+**Mutually exclusive groups**: at most one of `--only`, `--exclude`, `--only-cluster`, `--exclude-cluster` may be set. Reject combinations with an error.
+
+### Cluster aliases (added v0.4)
+
+| Alias | Letter | Dimensions covered |
+|---|---|---|
+| `spec` | `A` | `spec-stability`, `test-coverage` |
+| `deploy` | `B` | `foundation`, `deploy-and-ci`, `observability` |
+| `health` | `C` | `domain-shape`, `risk-hotspots`, `code-smells`, `performance`, `reliability`, `background-jobs`, `data-integrity`, `developer-experience`, `cost-and-scaling` |
+| `security` | `D` | `security-and-authz`, `authorization`, `money-and-payments`, `data-governance` |
+
+Note: `security` resolves to **cluster D** in `--only-cluster`, but to the single dimension `security-and-authz` in `--only`. Use the cluster flag to mean "the broad security audit slice including money + governance + authorization."
 
 ### Aliases (case-insensitive)
 
@@ -52,8 +65,9 @@ Dimension names accepted directly (e.g. `money-and-payments`) as well.
 ### Validation
 
 - Unknown dimension or alias → reject with `"Unknown dimension '<name>'. Did you mean '<closest-match>'?"` and exit. Use Levenshtein distance ≤2 for the suggestion.
-- `--only=` empty (no dimensions) → reject.
-- Both `--only` and `--exclude` set → reject.
+- Unknown cluster letter or alias → reject with `"Unknown cluster '<name>'. Valid: A, B, C, D, or spec/deploy/health/security."`
+- `--only=` (or `--only-cluster=`) empty → reject.
+- More than one of `--only`/`--exclude`/`--only-cluster`/`--exclude-cluster` set → reject.
 
 ### Behavior
 
