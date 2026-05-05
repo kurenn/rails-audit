@@ -4,6 +4,12 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Changed (v0.5 milestone PR#2 — C2 threshold: 25% → 30%)
+
+- C2 (blocker over-use) threshold raised from `> 0.25` to `> 0.30` in `dimensions/self-check.md`.
+- Calibration note added explaining the bump: coba's v0.4 dogfood had 29.4% blockers post-secrets-scanner, all correctly tagged per rubric. Old threshold spuriously blocked. 30% is a realistic ceiling.
+- Closes #51.
+
 ### Added (v0.5 milestone PR#1 — Severity inheritance for EOL-derived CVEs)
 
 - New schema field: `findings[].severity_inherited_from` (additive, optional, finding_id format). When set, the finding is a consequence of the cited root-cause finding and has been demoted by one tier.

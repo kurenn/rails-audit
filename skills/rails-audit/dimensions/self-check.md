@@ -32,9 +32,11 @@ Each check has: trigger, threshold, output to `self_check.calibration.warnings[]
 ### C2 — Blocker over-use
 
 **Trigger.** Compute `blocker_pct = (count where severity == "blocker") / total_findings`.
-**Threshold.** Warn if `blocker_pct > 0.25`.
-**Output.** Push to `warnings[]`: `"Blocker over-use: <pct>% of findings tagged 'blocker' (threshold: 25%)"`.
-**Why.** Same shape as C1 but with a tighter threshold — "blocker" is the rarest severity. If >25% of findings are blockers, either the project is *truly* on fire (rare, and the report should explicitly say so in the verdict) or the synthesis is inflating. Per `rubric.md`, blockers require a *current-day* exploit/loss/breakage path — "one mistake away" is **high**, not blocker.
+**Threshold.** Warn if `blocker_pct > 0.30` (raised from 0.25 in v0.5).
+**Output.** Push to `warnings[]`: `"Blocker over-use: <pct>% of findings tagged 'blocker' (threshold: 30%)"`.
+**Why.** Same shape as C1 but with a tighter threshold — "blocker" is the rarest severity. If >30% of findings are blockers, either the project is *truly* on fire (rare, and the report should explicitly say so in the verdict) or the synthesis is inflating. Per `rubric.md`, blockers require a *current-day* exploit/loss/breakage path — "one mistake away" is **high**, not blocker.
+
+**v0.5 calibration**: threshold raised from 25% → 30% based on the v0.4 dogfood on coba. The secrets scanner enumerates each tracked secret as its own blocker; coba had 8 verified blockers + secrets scanner + foundation = 29.4% blocker, all correctly tagged per rubric. The old 25% threshold spuriously blocked. New 30% threshold gives realistic ceiling without softening the warning's intent — at 35%+ findings, synthesis really is suspect.
 
 ### C3 — Unverified blocker
 
