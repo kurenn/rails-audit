@@ -103,11 +103,25 @@ Read the four agent outputs and produce **a JSON object conforming to `schema/re
 
 The output of this step is **a single JSON object**. Validate it against `schema/report.schema.json` before proceeding.
 
-### Step 5. Render markdown
+### Step 5.5 (was 5). Self-check the report
 
-Apply `output-template.md` to the JSON from Step 4. The template is authoritative — placeholder names refer to JSON paths. Filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`) are deterministic; same JSON in produces same markdown out.
+Before rendering, run the self-check defined in `dimensions/self-check.md`. The five checks (C1–C5) operate on the JSON from Step 4:
 
-### Step 6. Write outputs
+- **C1** Severity inflation — warn if `>40%` of findings are `high`
+- **C2** Blocker over-use — warn if `>25%` are `blocker`
+- **C3** Unverified blocker — for each blocker, `sed -n '<line>p' <file>` must contain a substring of `evidence.normalized`. Fail → mark `findings[<id>].self_check.status = "unverified"` and add to `self_check.unverified_blockers[]`
+- **C4** Phase dependency mismatch — `findings[id].phase` must equal `fix_sequence[].finding_ids` references
+- **C5** Scorecard ↔ finding-count mismatch — per-dimension score must fall in the expected band given the weighted finding count for that dimension (blocker=4, high=3, medium=2, low=1)
+
+In **v0.2** these are warn-only: results land in `self_check.calibration.warnings[]` and per-finding `self_check{}`, no findings are removed or demoted. If warnings fire and the user is interactively driving the audit, prompt **P7** (`prompts.md`) — show / demote / accept. Default is `show`. v0.2 honors `accept` automatically (skill ships the report); `demote` is a no-op in v0.2 and lands as a real action in v0.3.
+
+Self-check meta-findings render in the markdown report as a `## Self-check` section above the punch list (template already supports this).
+
+### Step 6 (was 5). Render markdown
+
+Apply `output-template.md` to the JSON from Step 4 (now possibly mutated by Step 5.5). The template is authoritative — placeholder names refer to JSON paths. Filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`) are deterministic; same JSON in produces same markdown out.
+
+### Step 7 (was 6). Write outputs
 
 Save **both** files to `tmp/rails-audit/`:
 
@@ -116,7 +130,7 @@ Save **both** files to `tmp/rails-audit/`:
 
 If a prior `report-*.json` exists in the same directory, populate `trend{}` in the new JSON before rendering (see PR#10 — finding-level diff by fingerprint).
 
-### Step 7. Brief the user
+### Step 8 (was 7). Brief the user
 
 ≤200 words back to the user: top 3 blockers, recommended next action, links to both the `.json` and `.md` files.
 

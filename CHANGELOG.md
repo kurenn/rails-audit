@@ -20,6 +20,13 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#5 — Audit-the-audit self-check)
+
+- **`dimensions/self-check.md`** — defines five calibration checks the skill runs against its own report before delivery: C1 severity inflation (>40% high), C2 blocker over-use (>25% blocker), C3 unverified blocker (cited line not `sed`-confirmed), C4 phase dependency mismatch, C5 scorecard ↔ finding-count mismatch.
+- **`SKILL.md`** new Step 5.5 (between synthesis and render). Runs the five checks; surfaces results in `self_check.calibration.warnings[]` and per-finding `self_check.status`.
+- **In v0.2 self-check is warn-only.** No findings are removed or demoted. Hardening to block is planned for v0.3 once thresholds are calibrated against ~5 real audits.
+- Step numbering shifted downstream: render is now Step 6, write Step 7, brief Step 8.
+
 ### Added (v0.2 PR#4 — `bin/check-tools` standalone command)
 
 - **`bin/check-tools`** — Ruby script that inventories rails-audit tooling in any Rails project.
