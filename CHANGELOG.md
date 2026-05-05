@@ -4,6 +4,24 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-05
+
+> The v0.3 milestone shipped under this version number — v0.3.0 was already used for the plugin-restructure release on the same day. Ten PRs across calibration + synthesis quality + ergonomics + polish phases, driven by the v0.2 dogfood evidence on influapp + coba.
+
+### Highlights
+
+- **Self-check hardened** from warn-only → block-with-override. C1, C2, C3 now block at Step 5.5 unless C7 overrides or the user explicitly accepts/demotes.
+- **Calibration override C7** suppresses C1/C2 when blockers are sed-verified and the project legitimately has broad defect density. Both v0.2 dogfoods would have qualified.
+- **Stale-coverage check C6** catches the SimpleCov-data-not-refreshed-in-CI failure mode both v0.2 dogfoods exhibited.
+- **Tracked-secrets scanner** (`bin/scan-secrets`) runs as Step 1.5; auto-blocker findings on private keys / credentials / cloud SA JSONs. Found `lib/certs/production.pem` on influapp the v0.2 agents missed.
+- **Tool-output parsers** (`bin/parse-brakeman`, `parse-bundle-audit`, `parse-rubocop`) convert raw tool JSON/text into ready-to-merge finding stubs with stable fingerprints. Surfaced 64 individual bundle-audit advisories on influapp where v0.2 had 3 aggregated findings.
+- **Security revalidation** (Step 4.6) mirrors v0.2's money revalidation. Six checks: token comparison, IDOR, trusted-header identity, SQL interpolation, open redirect, SSRF.
+- **`--continue` / `--from-findings`** re-run modes skip detect + agent fan-out (~5K vs ~50K tokens).
+- **`--only-cluster=A,B`** cluster-level scoping atop v0.2's per-dimension scoping.
+- **`--track-renames`** opt-in fuzzy matching for moved findings across file renames; preserves first_seen for age tracking.
+- **Multi-file output** when reports exceed 30 KB (split into summary / findings / appendix sub-files).
+- **Link-rot CI** weekly checks reference URLs in dimension files; opens tracking issue on rot.
+
 ### Added (v0.3 milestone PR#10 — Link-rot CI for reference points)
 
 - New GitHub Actions workflow `.github/workflows/check-references.yml`. Runs weekly (Mondays 09:00 UTC) and on manual dispatch. Extracts URLs from the `## Reference points` sections of `skills/rails-audit/dimensions/*.md`, HEAD-checks each, and opens (or updates) a tracking issue tagged `link-rot` listing the rotted URLs.
@@ -195,6 +213,8 @@ Initial release.
 - Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
 - Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
 
-[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.4.0
+[0.3.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.1.0
