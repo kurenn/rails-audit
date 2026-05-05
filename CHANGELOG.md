@@ -4,6 +4,21 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#9 — Multi-file output for large reports)
+
+- **Single-file mode** (default, < 30 KB) — unchanged: `report-YYYY-MM-DD.{json,md}`.
+- **Multi-file mode** (≥ 30 KB) — splits into 4 files:
+  - `report-YYYY-MM-DD.json` (single source of truth, unchanged)
+  - `report-YYYY-MM-DD.md` (top-level index with anchor links)
+  - `report-YYYY-MM-DD-summary.md` (exec summary + scorecards + fix sequence)
+  - `report-YYYY-MM-DD-findings.md` (full punch list)
+  - `report-YYYY-MM-DD-appendix.md` (tooling, coverage, hotspots, ignored, cost)
+- Sub-files inherit the report header so each is self-contained when read alone.
+- Force a mode via `--single-file` or `--multi-file`; default measures and chooses.
+- Threshold (30 KB) tunable via `.claude/rails-audit.yml` if needed in future.
+- influapp v0.2 markdown is ~22 KB; coba ~25 KB. Both stay single-file. Trigger fires on larger projects (e.g. 50+ findings) or `--deep` mode reports.
+- Closes #36.
+
 ### Added (v0.3 milestone PR#8 — Rename detection in fingerprints)
 
 - **`--track-renames`** CLI flag (and `track_renames: true` in `.claude/rails-audit.yml`) opts in to fuzzy-matching fixed+new pairs as moved findings. Default off — keeps trends precise.
