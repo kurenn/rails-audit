@@ -220,7 +220,11 @@
       "time_estimate": "1d",
       "tool_origin": "manual",
       "phase": 2,
-      "ignored": false
+      "ignored": false,
+      "money_revalidation": {
+        "status": "confirmed",
+        "notes": "M-RV-3 confirmed: handler runs irreversible side effects (Commission.perform!) on the dedup'd path. Severity already high; would consider blocker if Commission grows to a non-reversible chain."
+      }
     },
     {
       "id": "f-b1b2c3d4e5f60002",
@@ -268,12 +272,16 @@
         "snippet": "@user.update_column(:stripe_customer_id, customer.id)",
         "normalized": "@user.update_column(:stripe_customer_id, customer.id)"
       },
-      "explanation": "A payment-relevant column being written without validations or callbacks. If an audit gem (paper_trail/audited) is added later, this silently skips it.",
-      "fix_sketch": "@user.update!(stripe_customer_id: customer.id)",
-      "time_estimate": "5m",
+      "explanation": "A payment-relevant column being written without validations or callbacks. If an audit gem (paper_trail/audited) is added later, this silently skips it. Re-validation also notes this column should carry an audit trail per M-RV-6 (audit-column completeness on money tables).",
+      "fix_sketch": "@user.update!(stripe_customer_id: customer.id); track customer-ID changes via paper_trail or an explicit StripeCustomerLink record.",
+      "time_estimate": "1h",
       "tool_origin": "grep",
       "phase": 2,
-      "ignored": false
+      "ignored": false,
+      "money_revalidation": {
+        "status": "refined",
+        "notes": "M-RV-6: original synthesis flagged the validation bypass; refined to also note the missing audit-trail column. Fix sketch and time estimate adjusted (5m → 1h to account for the audit hookup)."
+      }
     },
     {
       "id": "f-b1b2c3d4e5f60005",
@@ -355,13 +363,17 @@
         "snippet": "Stripe::Transfer.create(...) / Stripe::Payout.create(...) without idempotency_key:",
         "normalized": "stripe_create_without_idempotency_key"
       },
-      "explanation": "A retried payout job creates duplicate Stripe Transfers/Payouts.",
-      "fix_sketch": "Pass idempotency_key: \"payout-#{payout.id}\" (stable internal ID) on every Stripe::*.create mutation.",
+      "explanation": "A retried payout job creates duplicate Stripe Transfers/Payouts. Re-validation re-read app/services/payments/payout.rb:11-62 and confirmed no idempotency_key: argument on the create calls.",
+      "fix_sketch": "Pass idempotency_key: \"payout-#{payout.id}\" (stable internal ID) on every Stripe::*.create mutation. Do NOT use SecureRandom or Time.now for the key.",
       "time_estimate": "1d",
       "tool_origin": "agent",
       "phase": 2,
       "ignored": false,
-      "self_check": { "status": "unverified", "notes": "Agent-reported; needs file re-read before fix." }
+      "self_check": { "status": "verified", "notes": "Confirmed by re-read in money-revalidation pass." },
+      "money_revalidation": {
+        "status": "promoted",
+        "notes": "M-RV-1 (idempotency-key derivation): original synthesis tagged medium based on a brief look. Re-validation re-read the file, confirmed no idempotency_key argument, and promoted to high per the money rubric (Stripe mutations missing idempotency keys default to high). Note also M-RV-1 sub-rule: the key MUST derive from a stable internal ID, not SecureRandom — added to the fix sketch."
+      }
     },
     {
       "id": "f-b1b2c3d4e5f6000a",

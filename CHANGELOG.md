@@ -20,6 +20,14 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#6 — Money-path re-validation pass)
+
+- **`dimensions/money-revalidation.md`** — defines the focused second pass on every finding tagged `money-and-payments` (primary OR secondary). Six money-specific re-checks: M-RV-1 idempotency-key derivation, M-RV-2 transaction boundary ordering, M-RV-3 webhook event-ID dedup, M-RV-4 money column types (Float = blocker), M-RV-5 refund/reversal idempotency, M-RV-6 audit-trail completeness.
+- **`SKILL.md`** new **Step 4.5** between synthesis and self-check. Sets `findings[<id>].money_revalidation` to `confirmed` / `refined` / `rejected` / `promoted`. Includes a proactive sweep on `app/services/payments/*`, `app/controllers/webhooks/stripe_*`, `app/jobs/*payment*`, `app/jobs/*payout*`, and money-shaped columns in `db/schema.rb`.
+- **`examples/sample-report.json`** — three findings now exercise the field: `confirmed` (webhook dedup), `refined` (update_column on stripe_customer_id), `promoted` (Stripe payouts missing idempotency keys, originally tagged medium).
+- **`examples/sample-report.md`** — regenerated to show the `_Re-validated: <status>_` badges.
+- Schema and template already supported `money_revalidation` from PR#1; no schema or template change needed.
+
 ### Added (v0.2 PR#5 — Audit-the-audit self-check)
 
 - **`dimensions/self-check.md`** — defines five calibration checks the skill runs against its own report before delivery: C1 severity inflation (>40% high), C2 blocker over-use (>25% blocker), C3 unverified blocker (cited line not `sed`-confirmed), C4 phase dependency mismatch, C5 scorecard ↔ finding-count mismatch.

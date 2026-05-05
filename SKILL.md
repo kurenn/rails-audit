@@ -103,6 +103,23 @@ Read the four agent outputs and produce **a JSON object conforming to `schema/re
 
 The output of this step is **a single JSON object**. Validate it against `schema/report.schema.json` before proceeding.
 
+### Step 4.5. Money-path re-validation
+
+Before self-check, run a focused second pass on every finding tagged `money-and-payments` in `primary_dimension` OR `secondary_dimensions[]`. See `dimensions/money-revalidation.md` for the full checklist.
+
+For each finding in scope:
+
+1. Re-read the cited file region with `sed -n '<start>,<end>p' <file>`.
+2. Apply the money-specific checks from `dimensions/money-and-payments.md`: idempotency-key derivation (M-RV-1), transaction-boundary ordering (M-RV-2), webhook event-ID dedup (M-RV-3), money column types (M-RV-4), refund idempotency (M-RV-5), audit trail completeness (M-RV-6).
+3. Set `findings[<id>].money_revalidation` to one of:
+   - `confirmed` — finding stands as written
+   - `refined` — same finding, evidence/explanation/fix_sketch improved with money-specific detail (record `notes`)
+   - `rejected` — false positive on closer look (set `ignored: true`, record `notes`)
+   - `promoted` — severity bumped one tier because a money-specific check applies (record `notes`)
+4. Run the **proactive sweep** on `app/services/payments/*`, `app/controllers/webhooks/stripe_*`, `app/jobs/*payment*`, `app/jobs/*payout*`, and money-shaped columns in `db/schema.rb` to surface findings that synthesis may have missed. New findings get `tool_origin: "money-revalidation"`.
+
+Re-validation never modifies `id`, `primary_dimension`, or `secondary_dimensions[]`. Schema field `findings[].money_revalidation` is already defined as nullable in `schema/report.schema.json` from PR#1; the template renders `_Re-validated: <status>_` next to fix sketches.
+
 ### Step 5.5 (was 5). Self-check the report
 
 Before rendering, run the self-check defined in `dimensions/self-check.md`. The five checks (C1–C5) operate on the JSON from Step 4:
