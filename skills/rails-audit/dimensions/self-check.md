@@ -73,6 +73,42 @@ The output must contain a meaningful subset of `evidence.normalized` (or the ver
 **Output.** Push to `warnings[]`: `"Scorecard mismatch on <dimension>: actual=<a>, expected band=<b>–<c> based on <weighted> weighted finding(s)."`
 **Why.** Scorecards anchor the report's narrative arc. If a dimension scores 8/10 but has 6 findings tagged to it, readers get confused. Either the score should drop or the findings need re-tagging. The check is intentionally lenient (>2 points) to allow editorial judgment.
 
+### C6 — Stale coverage data (added v0.3)
+
+**Trigger.** Read mtime of `coverage/.last_run.json` and `coverage/.resultset.json` at audit time.
+**Threshold.** Warn if either file's mtime is **>30 days old**.
+**Output.**
+- Push to `warnings[]`: `"Stale coverage data: coverage/.resultset.json last updated YYYY-MM-DD (<N> days ago). Coverage-derived findings marked unverified."`
+- For every finding tagged `test-coverage` whose `tool_origin == "simplecov"`: set `findings[<id>].self_check.status = "unverified"`.
+
+**Why.** Both v0.2 dogfood projects (influapp + coba) had `coverage/.resultset.json` dated March 2025 — read at audit time on 2026-05-05 as if current, producing misleading 0% on payments services that almost certainly have working specs. A 30-day TTL catches the stale case without false-positive on recent runs.
+
+**Skipped.** If neither file exists, the check is silently skipped (no false positive on projects that haven't run SimpleCov locally — those just won't have coverage findings).
+
+**Calibration.** 30-day threshold is a v0.3 first pass. Revisit after 5+ projects' worth of run-cadence data.
+
+### C7 — Real-distribution override (added v0.3)
+
+**Trigger.** When C1 (severity inflation) or C2 (blocker over-use) would fire, evaluate the override:
+
+```
+override_applies =
+  self_check.unverified_blockers.empty? AND
+  summary.risk_score <= 4 AND
+  scorecards.count { |s| s.score <= 4 } >= 6
+```
+
+**Threshold.** All three conditions must hold.
+**Output.**
+- If the override applies, **suppress** the C1/C2 warnings. Emit instead: `"Severity distribution reflects real defect density (calibration override C7 applied: <N> sed-verified blockers, risk_score <S>, <M> dimensions ≤4)."`
+- The override does **not** affect C3 (unverified blocker) — that always fires when there are unverified blockers.
+
+**Why.** Both v0.2 dogfood projects fired C1 (47% / 48% high). On closer read this reflected real defect density — influapp had 8/8 sed-verified blockers across 8 dimensions ≤4 risk; coba had 4/4 across similar breadth. The C1 warning in those cases is *misleading*: it suggests synthesis was lazy when the project is genuinely on fire. C7 distinguishes "project-on-fire" (override) from "synthesis-inflated" (no override → warning fires as designed).
+
+**Anti-pattern guarded against.** A project might game the override by inflating low scorecard scores. The 6-of-18 dimensions ≤4 threshold is intentionally hard to game without the actual evidence to back it up.
+
+**Calibration.** Revisit after 5+ audits. Likely candidates for adjustment: the `risk_score <= 4` cutoff (could move to 5), the dimensions-≤4 count (could move to 5 or 7).
+
 ---
 
 ## Output schema
@@ -127,11 +163,15 @@ In v0.2 the default flow is non-interactive: warnings render, no demotion happen
 
 ---
 
-## Future hardening (v0.3)
+## Future hardening (v0.4+)
 
-When the v0.2 thresholds have been calibrated against ~5 real audits:
+After v0.3 lands C6 (stale coverage) and C7 (real-distribution override) and we've run audits against 5+ projects:
 
-1. Promote C1/C2 to **block** when above threshold, with an interactive demote-or-override prompt.
+1. Promote C1/C2 to **block** when above threshold (after C7 override), with an interactive demote-or-override prompt.
 2. Add an "auto-demote" flow: a finding flagged for inflation gets its severity dropped one tier, and `self_check.status: "demoted"` records the change with reasoning.
-3. Add C6: severity ↔ time-estimate consistency (a blocker tagged `time_estimate: 5m` is suspicious — either it's overrated or the fix really is trivial).
-4. Add C7: cross-dimension consistency — if a finding tagged `secondary_dimensions: [money-and-payments]` doesn't appear in any money-and-payments scorecard reasoning, flag it.
+3. Add C8: severity ↔ time-estimate consistency (a blocker tagged `time_estimate: 5m` is suspicious — either it's overrated or the fix really is trivial).
+4. Add C9: cross-dimension consistency — if a finding tagged `secondary_dimensions: [money-and-payments]` doesn't appear in any money-and-payments scorecard reasoning, flag it.
+
+## Note on v0.3 numbering
+
+C6 in v0.3 is **stale coverage data**. The earlier v0.2 placeholder mentioned a "C6 severity ↔ time-estimate consistency" — that's been renumbered to C8 in the v0.4+ plan above. C7 in v0.3 is **real-distribution override**.

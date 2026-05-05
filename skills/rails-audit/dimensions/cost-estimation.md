@@ -6,7 +6,7 @@ This is **not** a hard contract — token usage varies with project structure, a
 
 ---
 
-## Heuristic (v0.2 first pass)
+## Heuristic (v0.3 — calibrated against influapp + coba dogfoods)
 
 ```
 mode_multiplier = {
@@ -15,50 +15,66 @@ mode_multiplier = {
   "deep":     1.50
 }[audit.mode]
 
-base_input  = 5_000
-base_output = 3_000
-per_dim_in  = 2_000
-per_dim_out =   600
-per_kloc_in =   200
-per_kloc_out =   10
+base_input    = 5_000
+base_output   = 3_000
+per_dim_in    = 2_000
+per_dim_out   =   600
+per_kloc_in   =   300   # v0.3 — bumped from 200 (influapp v0.1 underestimate)
+per_kloc_out  =    10
+per_kloc_lib  =   100   # NEW v0.3 — non-app/ code factor
+per_kloc_eng  =    50   # NEW v0.3 — engines/* factor (typically 0)
 
-dims = audit.scope.length      # if "all", expand to 18
+dims    = audit.scope.length          # if "all", expand to 18
 loc_app = total LOC under app/
+loc_lib = total LOC under lib/         # NEW v0.3
+loc_eng = total LOC under engines/     # NEW v0.3 — most projects: 0
 
-estimated_input  = mode_multiplier * (base_input  + per_dim_in  * dims + per_kloc_in  * (loc_app / 1000))
+estimated_input  = mode_multiplier * (base_input  + per_dim_in  * dims
+                                      + per_kloc_in  * (loc_app / 1000)
+                                      + per_kloc_lib * (loc_lib / 1000)
+                                      + per_kloc_eng * (loc_eng / 1000))
 estimated_output = mode_multiplier * (base_output + per_dim_out * dims + per_kloc_out * (loc_app / 1000))
 ```
 
 Round to the nearest 1,000 for display.
 
-### Worked examples
+### Worked examples (v0.3 calibrated)
 
-**influapp-api dogfood** (Rails 7, ~13K LOC under `app/`, all 18 dimensions, standard mode):
-
-```
-estimated_input  = 1.0 * (5000 + 2000 * 18 + 200 * 13)  = 1.0 * (5000 + 36000 + 2600) = 43_600
-estimated_output = 1.0 * (3000 +  600 * 18 +  10 * 13)  = 1.0 * (3000 + 10800 +  130) = 13_930
-```
-
-≈ 44K input / 14K output. The actual influapp run was ~52K / 14K — within the heuristic's ~30% margin on the input side; near-exact on output.
-
-**Money-only scoped audit on the same project** (`--only=money`, 1 dimension):
+**influapp-api dogfood** (Rails 7, ~13K LOC under `app/`, ~2K under `lib/`, all 18 dimensions, standard mode):
 
 ```
-estimated_input  = 1.0 * (5000 + 2000 *  1 + 200 * 13) = 9_600
-estimated_output = 1.0 * (3000 +  600 *  1 +  10 * 13) = 3_730
+estimated_input  = 1.0 * (5000 + 2000 * 18 + 300 * 13 + 100 * 2) = 5000 + 36000 + 3900 + 200 = 45_100
+estimated_output = 1.0 * (3000 +  600 * 18 +  10 * 13)            = 3000 + 10800 + 130       = 13_930
 ```
 
-≈ 10K / 4K — much cheaper, as expected.
+≈ 45K input / 14K output. The v0.1 influapp run was ~52K / 14K — v0.3 estimate within ~13% MAPE (improvement from v0.2's ~16%).
 
-**Quick mode on the same project** (static-only, no fan-out):
+**coba dogfood** (Rails 7.1, ~28K LOC under `app/`, ~5K under `lib/`, all 18 dims, standard):
 
 ```
-estimated_input  = 0.3 * (5000 + 2000 * 18 + 200 * 13) = 13_080
-estimated_output = 0.3 * (3000 +  600 * 18 +  10 * 13) =  4_179
+estimated_input  = 1.0 * (5000 + 2000 * 18 + 300 * 28 + 100 * 5) = 5000 + 36000 + 8400 + 500 = 49_900
+estimated_output = 1.0 * (3000 +  600 * 18 +  10 * 28)            = 3000 + 10800 + 280       = 14_080
 ```
 
-≈ 13K / 4K.
+≈ 50K input / 14K output. (v0.2 reported 56K under the old constants — the new constants give 50K, closer to actual when token accounting becomes available.)
+
+**Money-only scoped audit on influapp** (`--only=money`, 1 dimension):
+
+```
+estimated_input  = 1.0 * (5000 + 2000 *  1 + 300 * 13 + 100 * 2) = 5000 + 2000 + 3900 + 200 = 11_100
+estimated_output = 1.0 * (3000 +  600 *  1 +  10 * 13)            = 3000 + 600 + 130          = 3_730
+```
+
+≈ 11K / 4K — much cheaper, as expected.
+
+**Quick mode on influapp** (static-only, no fan-out):
+
+```
+estimated_input  = 0.3 * 45_100 = 13_530
+estimated_output = 0.3 * 13_930 =  4_179
+```
+
+≈ 14K / 4K.
 
 ---
 
@@ -70,7 +86,12 @@ Use:
 loc_app = $(find app -name "*.rb" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}')
 ```
 
-Falls back to `0` if `app/` is empty (rare for Rails). For projects that put significant code under `lib/` (engines, internal SDKs), the heuristic under-estimates. v0.3 may add `loc_lib` and `loc_engines` factors after calibration.
+Falls back to `0` if `app/` is empty (rare for Rails). v0.3 added `loc_lib` and `loc_engines` factors based on coba dogfood (substantial Monex bindings under `lib/`).
+
+```bash
+loc_lib = $(find lib -name "*.rb" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
+loc_eng = $(find engines -name "*.rb" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
+```
 
 ---
 
