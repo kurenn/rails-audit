@@ -1,0 +1,126 @@
+---
+name: rails-audit
+description: Comprehensive Rails project stability audit across 18 dimensions — foundation, domain shape, specs, coverage, deploy/CI, security, authorization, money paths, code health, code smells, performance, reliability, observability, jobs, data integrity, governance, DX, and cost. Use when user asks to "audit this Rails project", "stability assessment", "code health check", "pre-launch review", "Rails security audit", or "is this ready to ship". Produces a severity-ranked markdown report with a recommended fix sequence. Read-only — never edits code.
+---
+
+# Rails Audit
+
+Run a structured stability audit of a Ruby on Rails codebase and produce a single markdown report with a severity-ranked punch list and a recommended fix sequence.
+
+## Modes
+
+- `--quick` — static-only checks (bundle audit, brakeman, rubocop, basic greps). Single agent. ~3 min. Suitable for PR-time.
+- `--standard` (default) — full audit with parallel subagents. ~10–15 min.
+- `--deep` — standard + boots app, runs subset of specs, mutation testing on critical paths. ~30+ min.
+
+If the user invokes `/rails-audit` with no mode, ask once: "Quick (3min, static only), Standard (15min, default), or Deep (30min+, runs specs)?" — then proceed.
+
+## Workflow
+
+### Step 1. Detect
+
+Confirm Rails project, capture orientation:
+
+```bash
+test -f Gemfile && grep -q "gem ['\"]rails['\"]" Gemfile || echo "NOT_RAILS"
+test -f config/application.rb || echo "NOT_RAILS"
+ruby -e 'puts RUBY_VERSION' 2>/dev/null
+grep -E "^ruby|gem ['\"]rails['\"]" Gemfile
+ls app/ config/ .github/workflows/ 2>/dev/null
+test -f Procfile -o -f Dockerfile -o -f fly.toml -o -f config/deploy.yml && echo "deploy artifacts found"
+```
+
+Read `.claude/rails-audit.yml` if present (project profile — see "Project profile" below). Otherwise auto-detect:
+- **Deploy target**: workflow filenames (`deploy-to-cloud-run.yml` → Cloud Run; `kamal*` → Kamal; presence of `Procfile` + Heroku buildpacks → Heroku; `fly.toml` → Fly).
+- **Job adapter**: `Gemfile` greps — `sidekiq`, `cloudtasker`, `good_job`, `delayed_job`, `resque`.
+- **Auth**: `Gemfile` greps — `devise`, `warden`, `jwt`, `clearance`, `doorkeeper`.
+- **Test framework**: `.rspec` exists → RSpec; `test/` exists → Minitest.
+
+### Step 2. Run static tooling in parallel
+
+See `tooling.md` for the full contract. Capture all output to `tmp/rails-audit/`:
+
+```bash
+mkdir -p tmp/rails-audit
+```
+
+Then run available tools in parallel Bash calls. Skip silently if not installed (note absence in the report's tooling section). For Bundler-managed tools, prefix with `bundle exec` if Gemfile lists them; otherwise try the bare command.
+
+### Step 3. Fan out to subagents
+
+Launch **4 Explore agents IN PARALLEL** (single message, multiple Agent calls). Each gets:
+- The relevant dimension file path(s) from `dimensions/`
+- The severity rubric path: `rubric.md`
+- The static-tool output paths from step 2
+- Instructions to return a structured punch list, ≤800 words
+
+**Cluster A — Spec & Coverage** (`dimensions/spec-and-coverage.md`)
+Audit the test suite for stability and the coverage signals that matter.
+
+**Cluster B — Deploy & CI** (`dimensions/deploy-ci.md`, `dimensions/observability.md`)
+Audit deploy pipeline, prod config, secrets, health checks, rollback, and observability.
+
+**Cluster C — Code Health** (`dimensions/domain-shape.md`, `dimensions/code-health.md`, `dimensions/performance-reliability.md`, `dimensions/background-jobs.md`)
+Audit risk hotspots, smells, antipatterns, performance, jobs, data integrity.
+
+**Cluster D — Security & Money** (`dimensions/security-and-authz.md`, `dimensions/money-and-payments.md`, `dimensions/data-governance.md`)
+Audit AuthN/AuthZ, OWASP-top patterns, payment/idempotency, PII handling.
+
+For each agent, write a self-contained brief: what to investigate, where to look, what to return. Don't say "based on the dimension file"; quote the specific checks the agent should run.
+
+### Step 4. Synthesize
+
+Read the four agent outputs. Then:
+
+1. **Verify loud claims**. Before writing "force_ssl is disabled" or "token comparison is timing-vulnerable" as fact in the report, read the cited line yourself. Agents hallucinate line numbers.
+2. **Deduplicate**. Same finding (e.g., `update_column` bypassing validations) often surfaces in multiple clusters — merge into one entry.
+3. **Apply rubric**. Severity from `rubric.md`. Do not inflate to "high" to seem useful. Money/auth defects default to blocker unless verified non-exploitable.
+4. **Sequence fixes**. Order them so each phase unblocks the next (e.g., add `/healthz` and rollback path *before* tackling spec coverage, because the team needs to be able to ship safely while specs are being written).
+
+### Step 5. Write report
+
+Use `output-template.md`. Save as `tmp/rails-audit/report-YYYY-MM-DD.md` (use today's actual date). If a previous report exists, include a trend table (per-dimension score deltas).
+
+### Step 6. Brief the user
+
+≤200 words back to the user: top 3 blockers, recommended next action, link to the report file.
+
+## Critical rules
+
+- **Always invoke external tools, never re-implement them.** The skill's value is synthesis (deduping, ranking, sequencing), not detection. `brakeman`, `bundle-audit`, `rubocop`, `reek`, `rails_best_practices`, `simplecov` already do detection well.
+- **Cite file paths with line numbers.** `app/controllers/api/authenticated_controller.rb:33` — not "in the auth controller".
+- **Verify loud claims.** Read the cited file before writing the finding. Especially for security/money claims.
+- **Severity must follow the rubric.** Money/auth defects are blocker by default.
+- **Read-only.** Never edit code during an audit. Offer to fix afterward if the user asks.
+- **Don't pad.** A short, accurate report with 8 real findings beats a long one with 30 findings half of which are noise.
+- **Adapt to project profile.** A Cloud Run project gets different deploy checks than a Kamal one. A Sidekiq project gets different job checks than a Cloudtasker one.
+
+## Project profile
+
+Optional `.claude/rails-audit.yml` at repo root. When missing, auto-detect from Gemfile + workflows + paths.
+
+```yaml
+deploy_target: cloud_run         # cloud_run | heroku | kamal | render | ecs | fly | other
+job_adapter: cloudtasker         # sidekiq | resque | good_job | cloudtasker | delayed_job | other
+auth_strategy: warden_jwt        # devise | warden | jwt | clearance | doorkeeper | custom
+money_columns:                   # checked for Decimal type
+  - transactions.amount_cents
+  - payouts.amount
+critical_paths:                  # paths held to higher coverage + security bar
+  - app/services/payments/
+  - app/controllers/webhooks/
+  - app/services/identity_platform/
+ignore_paths:                    # excluded from smell/coverage checks
+  - app/admin/
+  - lib/legacy/
+```
+
+## Files
+
+- `rubric.md` — severity definitions and calibration examples
+- `tooling.md` — tool contract, detection, and invocation patterns
+- `output-template.md` — report markdown skeleton
+- `dimensions/` — per-dimension check lists, one file per cluster
+- `examples/sample-report.md` — example output
+
+When working on a specific dimension, read the corresponding `dimensions/*.md` file. Don't try to keep all 18 dimensions in head at once.

@@ -1,0 +1,14 @@
+# Local audit artifacts
+tmp/
+*.log
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
