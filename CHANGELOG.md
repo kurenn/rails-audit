@@ -4,6 +4,15 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#8 — Rename detection in fingerprints)
+
+- **`--track-renames`** CLI flag (and `track_renames: true` in `.claude/rails-audit.yml`) opts in to fuzzy-matching fixed+new pairs as moved findings. Default off — keeps trends precise.
+- **Algorithm**: pair a `fixed_id` with a `new_id` if same `primary_dimension` + same finding-type + `evidence.normalized` Levenshtein distance ≤ 20% of prior length OR ≤ 30 chars absolute (whichever is larger). Tunable via `rename_distance_pct`.
+- **Schema additive**: `trend.moved_ids[]` array with `{prior_id, current_id, prior_location, current_location, match_score}`. Removed pairs are taken out of `fixed_ids` and `new_ids`. v0.2/v0.3 reports validate clean against the v0.4 schema.
+- `first_seen` propagates from prior to current for moved findings — age preserved.
+- Trade-off documented: false positives possible (two unrelated `update_column` findings could match). False positives visible in the trend table for user inspection.
+- Closes #34.
+
 ### Added (v0.3 milestone PR#7 — Cluster-level scoping)
 
 - **`--only-cluster=<list>`** and **`--exclude-cluster=<list>`** in SKILL.md "Scope arguments". Accepts cluster letters (`A`/`B`/`C`/`D`) or English aliases (`spec`/`deploy`/`health`/`security`).

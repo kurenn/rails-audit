@@ -370,7 +370,23 @@
         "prior_report_date":  { "type": "string", "format": "date" },
         "fixed_ids":          { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
         "new_ids":            { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
-        "persisted_ids":      { "type": "array", "items": { "$ref": "#/$defs/finding_id" } }
+        "persisted_ids":      { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
+        "moved_ids": {
+          "type": "array",
+          "description": "Populated only when --track-renames is enabled. Each entry is a fuzzy-matched pair across files. Added v0.4.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["prior_id", "current_id"],
+            "properties": {
+              "prior_id":         { "$ref": "#/$defs/finding_id" },
+              "current_id":       { "$ref": "#/$defs/finding_id" },
+              "prior_location":   { "type": "object" },
+              "current_location": { "type": "object" },
+              "match_score":      { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
       }
     },
 
