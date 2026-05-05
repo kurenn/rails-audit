@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.5 milestone PR#5 — Live token accounting contract)
+
+- New "Live token accounting" section in `dimensions/cost-estimation.md` documenting how the skill populates `cost.actual_input_tokens` / `cost.actual_output_tokens` when the harness exposes per-call usage metadata. Three capture points: Bash tool invocations, agent fan-out, synthesis/render.
+- When usage is unavailable, fields stay `null` and `audit.ignore_warnings` notes the gap (current behavior, now documented).
+- `capture_actual_tokens: true` in `.claude/rails-audit.yml` default; `--no-token-accounting` CLI override.
+- Out of scope (documented): non-Claude harness adapters, billing, per-step breakdown.
+- Closes #55.
+
 ### Added (v0.5 milestone PR#4 — bin/parse-reek + bin/parse-rails-best-practices)
 
 - **`bin/parse-reek`** — reads reek `-f json` output, aggregates by smell type and top affected files. Aggregate-only (per-smell findings would be noise). Emits the `appendices.code_smells` shape.
