@@ -137,6 +137,23 @@ Read `.claude/rails-audit.yml` if present (project profile — see "Project prof
 - **Auth**: `Gemfile` greps — `devise`, `warden`, `jwt`, `clearance`, `doorkeeper`.
 - **Test framework**: `.rspec` exists → RSpec; `test/` exists → Minitest.
 
+### Step 1.5. Scan tracked secrets (added v0.3)
+
+Before running static tooling, run `bin/scan-secrets --json > tmp/rails-audit/secrets.json` from the project root. The script enumerates `git ls-files`, matches against secret-shaped filename patterns (`.pem`, `.p12`, `.pfx`, `.keystore`, `id_rsa`, `*credentials*.json`, `credentials.txt`, `secrets.txt`, `.env.production`, etc.), and emits ready-to-merge finding stubs.
+
+Each match is auto-blocker by default (private keys, GCP service-account JSONs, AWS credentials) — tracked secrets are permanently compromised by definition. Exclusions: `.crt`/`.cer`/`.cert`/`.ca`/`.pub` (public certs), files matching `*.example`, `*.sample`, `*.template`, anything under `spec/`, `test/`, or `fixtures/`.
+
+The findings stubs go directly into `findings[]` during synthesis (Step 4). Their `phase` is always 1 — secret rotation must precede any other work.
+
+If a finding is a false positive (e.g. an intentionally-tracked dummy `.pem` for testing), the user can add it to `.audit-ignore.yml` post-audit. The scanner does not attempt to read file *contents* — only filename patterns — so it cannot distinguish "dummy test cert" from "production key" by content. The `.audit-ignore.yml` mechanism is the right escape hatch.
+
+The scanner is also available standalone:
+
+```bash
+bin/scan-secrets                # human-readable table
+bin/scan-secrets --strict       # exit 1 if any tracked secret-shaped file is found (CI gate)
+```
+
 ### Step 2. Run static tooling in parallel
 
 See `tooling.md` for the full contract. Capture all output to `tmp/rails-audit/`:

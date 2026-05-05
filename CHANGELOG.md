@@ -4,6 +4,15 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#2 — Tracked-secrets scanner: bin/scan-secrets + Step 1.5)
+
+- **`bin/scan-secrets`** — Ruby script (stdlib only) enumerating `git ls-files` and matching against secret-shaped filename patterns. Emits human-readable table by default; `--json` for machine-readable; `--strict` for CI exit-code mode.
+- Patterns include: `.pem`, `.p12`, `.pfx`, `.keystore`, `id_rsa`/`id_ed25519`, `*credentials*.json` (including google-cloud, firebase-admin, gcp-key, aws-credentials), `credentials.txt`/`secrets.txt`, `.env.production`/`.env.*`, `circle_wallets.txt`, PII-shaped CSVs (`users.csv`, `members.csv`, etc.).
+- Excludes public certs (`.crt`, `.cer`, `.cert`, `.ca`, `.pub`), `*.example`/`*.sample`/`*.template`, files under `spec/`/`test/`/`fixtures/`.
+- **`SKILL.md` Step 1.5** invokes the scanner before static tooling. Findings auto-tagged blocker (or high for ambiguous), `phase: 1`, `primary_dimension: security-and-authz`. Routed straight into `findings[]` during synthesis.
+- Calibration evidence: scanner found a tracked `.pem` in influapp that the v0.2 agent fan-out missed. Coba scan finds 8 tracked secrets (matching the v0.2 agent's manual finding plus 2 more).
+- Closes #31.
+
 ### Added (v0.3 milestone PR#1 — Calibration bundle: C6 stale coverage + C7 real-distribution override + cost constants)
 
 > Note: the v0.3 milestone is tracked under that label but ships as **v0.4.0** since v0.3.0 was already used for the plugin-restructure release.
