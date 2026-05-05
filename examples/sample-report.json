@@ -18,7 +18,10 @@
       "job_adapter": "cloudtasker",
       "auth_strategy": "custom_jwt_identity_platform",
       "test_framework": "rspec"
-    }
+    },
+    "ignore_warnings": [
+      "Stale ignore: f-deadbeefdeadbeef does not match any current finding. Remove from .audit-ignore.yml."
+    ]
   },
 
   "summary": {
@@ -457,7 +460,7 @@
       "time_estimate": "1h",
       "tool_origin": "grep",
       "phase": 4,
-      "ignored": false
+      "ignored": true
     },
     {
       "id": "f-c1b2c3d4e5f60003",
@@ -500,6 +503,16 @@
       "tool_origin": "manual",
       "phase": 5,
       "ignored": false
+    }
+  ],
+
+  "ignored_findings": [
+    {
+      "id": "f-c1b2c3d4e5f60002",
+      "reason": "Bullet gem will be added in the Q3 N+1 audit sprint (LIN-1234). Current performance is acceptable per Datadog dashboards.",
+      "acknowledged_by": "abkuri88@gmail.com",
+      "expires_at": "2026-09-30",
+      "expired": false
     }
   ],
 

@@ -20,6 +20,20 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#7 — `.audit-ignore.yml` suppression mechanism)
+
+- **`.audit-ignore.yml`** at repo root suppresses acknowledged findings by fingerprint. Each entry: `id` (required), `reason` (required, non-empty), `acknowledged_by` (optional), `expires_at` (optional ISO date).
+- **`SKILL.md`** new **Step 4.4** between synthesis and money re-validation:
+  - Sets `findings[<id>].ignored = true` for matching entries.
+  - Builds top-level `ignored_findings[]` array.
+  - Surfaces stale ignores (no current finding matches) in `audit.ignore_warnings[]`.
+  - Re-surfaces expired ignores with a `_(ignore expired YYYY-MM-DD)_` note.
+- Findings with `ignored: true` are excluded from punch list, money re-validation, and self-check calibration percentages — but **included** in trend tracking (so an ignored finding still counts as "persisted" if it was in the prior report).
+- **`examples/.audit-ignore.yml.example`** documents the format with three illustrative entries: live, permanent (no expiry), and expired.
+- **`examples/sample-report.json`**: M4 (No bullet gem) marked `ignored: true` with a corresponding `ignored_findings[]` entry; one stale-ignore (`f-deadbeefdeadbeef`) demonstrates the warning path.
+- **`examples/sample-report.md`**: regenerated. Mediums table renumbered (M5 → M4 since old M4 is suppressed); Phase 4 fix sequence drops the suppressed item; Appendix D — Ignored findings populated.
+- Schema and template already supported `ignored_findings[]` and `audit.ignore_warnings[]` from PR#1; no schema or template change.
+
 ### Added (v0.2 PR#6 — Money-path re-validation pass)
 
 - **`dimensions/money-revalidation.md`** — defines the focused second pass on every finding tagged `money-and-payments` (primary OR secondary). Six money-specific re-checks: M-RV-1 idempotency-key derivation, M-RV-2 transaction boundary ordering, M-RV-3 webhook event-ID dedup, M-RV-4 money column types (Float = blocker), M-RV-5 refund/reversal idempotency, M-RV-6 audit-trail completeness.
