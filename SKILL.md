@@ -17,6 +17,37 @@ If the user invokes `/rails-audit` with no mode, ask once: "Quick (3min, static 
 
 ## Workflow
 
+### Step 0. Provision tooling
+
+The audit's value is bounded by which static tools are available. **Before fanning out**, ensure the project has the tools the skill expects.
+
+1. Detect what's installed (see `tooling.md` for the contract).
+
+2. **If any Tier-1 (required) tool is missing**, stop and ask the user with a copy-pasteable Gemfile snippet:
+
+   > "These required tools are missing: `<list>`. Without them, the audit cannot produce reliable findings on `<dimensions>`.
+   > I can add them to your `Gemfile` (recommended — version-locked) or install globally (faster but unpinned). Which would you prefer? [`gemfile` / `global` / `skip`]"
+
+   - `gemfile` → use the `Edit` tool to append the appropriate `group :development[, :test]` entries, then run `bundle install`. Verify with a per-tool `--version` check. Commit the Gemfile change is **not** the skill's job — leave it staged or let the user commit.
+   - `global` → run `gem install <tool>` for each. Note in the report that versions are unpinned.
+   - `skip` → proceed with degraded confidence. The tooling appendix in the report must list each skipped tool and which dimensions it would have strengthened.
+
+3. **For Tier-2 (recommended) tools**, ask once with a single batch prompt:
+
+   > "Recommended tools missing: `<list>`. Add them now? [`y` / `n`]"
+
+   `y` → batch-edit Gemfile and `bundle install`. `n` → proceed; missing tools noted in appendix.
+
+4. **Tier-3 (optional / deep-mode) tools** are *only* prompted in `--deep` mode, and are always opt-in.
+
+5. **Hard floor**: if the project declines all of `{rubocop, brakeman, simplecov}`, abort the audit. Without at least these three, the synthesis has nothing reliable to synthesize. Suggest installing them globally as the lowest-friction path and re-running.
+
+6. **Don't auto-add** anything without explicit consent. The Gemfile is the user's source of truth — modifying it silently is out of scope.
+
+7. **Cache provisioning state**: write `tmp/rails-audit/tools-detected.json` so subsequent runs can fast-path. Re-detect on `--quick` only if the cache is older than 7 days.
+
+A reusable Gemfile snippet for the user to paste manually if they prefer is documented in `tooling.md` under "Recommended Gemfile additions".
+
 ### Step 1. Detect
 
 Confirm Rails project, capture orientation:

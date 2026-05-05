@@ -2,6 +2,58 @@
 
 The skill **invokes** existing tools and **synthesizes** their output. It does not re-implement detection.
 
+## Provisioning policy
+
+The skill enforces tool availability in **Step 0** of its workflow (see `SKILL.md`). Required tools are mandatory; missing them aborts the audit. Recommended tools are batch-prompted. Optional tools are deep-mode only.
+
+**The skill never modifies the Gemfile silently.** It always prompts and shows the exact diff before applying. If the user prefers to install manually, the snippet below is copy-pasteable.
+
+## Recommended Gemfile additions
+
+Paste this into your `Gemfile` (the skill will offer to do it for you in Step 0):
+
+```ruby
+group :development do
+  # Required: security SAST and dependency CVE scanning
+  gem 'brakeman', require: false
+  gem 'bundler-audit', require: false
+
+  # Recommended: code smells and Rails-specific antipatterns
+  gem 'reek', require: false
+  gem 'rails_best_practices', require: false
+
+  # Recommended: complexity + duplication
+  gem 'flog', require: false
+  gem 'flay', require: false
+
+  # Optional: composite quality grade per file
+  gem 'rubycritic', require: false
+
+  # Optional: performance smells / dead code
+  gem 'fasterer', require: false
+  gem 'debride', require: false
+end
+
+group :development, :test do
+  # Recommended: runtime N+1 detection (and other AR smells)
+  gem 'bullet'
+end
+
+# Already common in many Rails projects:
+# gem 'rubocop', require: false
+# gem 'simplecov', require: false
+```
+
+Then:
+
+```bash
+bundle install
+# Optional: generate binstubs for faster invocation
+bundle binstubs brakeman bundler-audit reek rails_best_practices flog flay
+```
+
+## Tier 1: required
+
 ## Tier 1: required
 
 These should be available in any reasonably maintained Rails project. If missing, install warning in the report.
