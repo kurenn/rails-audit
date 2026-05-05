@@ -20,6 +20,14 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#9 — Token-budget awareness)
+
+- **`dimensions/cost-estimation.md`** — token-cost heuristic with worked examples. Pre-flight estimate based on mode multiplier × (base + per-dimension constant + per-KLOC constant for `app/`). Calibrated to ~30% MAPE on standard-mode runs of typical Rails projects (~10K–50K LOC).
+- **`SKILL.md`** new **Step 0.5** between provisioning and detect: compute estimate; trigger prompt **P5** if `--budget` is unset and estimated input > 30K tokens.
+- **`--budget=<N>`** flag enforced: each agent call is gated on remaining budget; budget hit saves partial JSON + flagged-partial markdown rather than silently truncating.
+- **Hard floor**: `--budget=<N>` where N < 5000 is rejected.
+- Schema `cost{}` and template Appendix E already supported these fields from PR#1; this PR populates them.
+
 ### Added (v0.2 PR#8 — `--only` / `--exclude` scoped audits)
 
 - **`--only=<comma-list>`** — run only the named dimensions or aliases. Example: `/rails-audit --only=money,security`.
