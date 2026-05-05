@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kurenn/rails-audit/blob/main/schema/report.schema.json",
+  "title": "Rails Audit Report",
+  "description": "Output schema for /rails-audit. JSON is the source of truth; markdown is rendered from this via output-template.md.",
+  "type": "object",
+  "required": ["schema_version", "skill_version", "audit", "summary", "scorecards", "findings", "tooling"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Bumped on breaking changes. v0.1 used freeform markdown; v0.2 introduces this schema."
+    },
+    "skill_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-z]+(\\.\\d+)?)?$",
+      "description": "Semver of the rails-audit skill that produced this report."
+    },
+    "audit":     { "$ref": "#/$defs/audit" },
+    "summary":   { "$ref": "#/$defs/summary" },
+    "scorecards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scorecard" }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "ignored_findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ignored_finding" },
+      "description": "Findings matched by .audit-ignore.yml. Not in punch list; rendered in Appendix D."
+    },
+    "tooling":    { "$ref": "#/$defs/tooling" },
+    "self_check": { "$ref": "#/$defs/self_check" },
+    "trend":      { "$ref": "#/$defs/trend" },
+    "cost":       { "$ref": "#/$defs/cost" },
+    "fix_sequence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/phase" }
+    },
+    "appendices": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rubocop_offenses": {
+          "type": "object",
+          "properties": {
+            "total":         { "type": "integer", "minimum": 0 },
+            "by_severity":   { "type": "object", "additionalProperties": { "type": "integer" } },
+            "top_categories":{ "type": "array",  "items": { "type": "string" } }
+          }
+        },
+        "todo_density": {
+          "type": "object",
+          "properties": {
+            "total":   { "type": "integer", "minimum": 0 },
+            "top_files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "file":  { "type": "string" },
+                  "count": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "coverage_map": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/coverage_path" }
+        },
+        "risk_hotspots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/hotspot" }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "dimension": {
+      "type": "string",
+      "enum": [
+        "foundation",
+        "domain-shape",
+        "spec-stability",
+        "deploy-and-ci",
+        "security-and-authz",
+        "authorization",
+        "money-and-payments",
+        "risk-hotspots",
+        "code-smells",
+        "test-coverage",
+        "performance",
+        "reliability",
+        "observability",
+        "background-jobs",
+        "data-integrity",
+        "data-governance",
+        "developer-experience",
+        "cost-and-scaling"
+      ]
+    },
+
+    "severity": {
+      "type": "string",
+      "enum": ["blocker", "high", "medium", "low"]
+    },
+
+    "time_estimate": {
+      "type": "string",
+      "enum": ["5m", "1h", "1d", "1w", "1mo"],
+      "description": "Effort estimate buckets. Coarse-grained on purpose."
+    },
+
+    "tool_origin": {
+      "type": "string",
+      "enum": [
+        "brakeman", "bundle-audit", "rubocop", "reek", "rails_best_practices",
+        "rubycritic", "flog", "flay", "simplecov", "fasterer", "debride",
+        "bullet", "grep", "agent", "manual"
+      ]
+    },
+
+    "finding_id": {
+      "type": "string",
+      "pattern": "^f-[0-9a-f]{12,64}$",
+      "description": "Stable fingerprint: SHA256(primary_dimension + file_path + finding_type + normalize(evidence_snippet)). Truncated to 16+ hex chars; prefix 'f-'."
+    },
+
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "started_at", "mode", "scope", "commit", "branch", "stack"],
+      "properties": {
+        "id":          { "type": "string", "format": "uuid" },
+        "started_at":  { "type": "string", "format": "date-time" },
+        "finished_at": { "type": "string", "format": "date-time" },
+        "mode":        { "enum": ["quick", "standard", "deep"] },
+        "scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/dimension" },
+              { "const": "all" }
+            ]
+          }
+        },
+        "commit":  { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "branch":  { "type": "string" },
+        "project_name": { "type": "string" },
+        "stack": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "ruby":          { "type": "string" },
+            "rails":         { "type": "string" },
+            "deploy_target": { "type": "string" },
+            "job_adapter":   { "type": "string" },
+            "auth_strategy": { "type": "string" },
+            "test_framework":{ "type": "string" }
+          }
+        },
+        "ignore_warnings": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Stale ignore entries that match no current finding."
+        }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk_score", "verdict", "next_action"],
+      "properties": {
+        "risk_score":      { "type": "integer", "minimum": 0, "maximum": 10 },
+        "verdict":         { "type": "string", "minLength": 1, "maxLength": 600 },
+        "top_blocker_ids": {
+          "type": "array",
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/finding_id" }
+        },
+        "next_action":     { "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    },
+
+    "scorecard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "score", "would_be_10"],
+      "properties": {
+        "dimension":   { "$ref": "#/$defs/dimension" },
+        "score":       { "type": "integer", "minimum": 0, "maximum": 10 },
+        "would_be_10": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "severity", "primary_dimension", "title",
+        "location", "evidence", "explanation", "fix_sketch", "tool_origin"
+      ],
+      "properties": {
+        "id":                   { "$ref": "#/$defs/finding_id" },
+        "severity":             { "$ref": "#/$defs/severity" },
+        "primary_dimension":    { "$ref": "#/$defs/dimension" },
+        "secondary_dimensions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dimension" },
+          "uniqueItems": true,
+          "default": []
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file"],
+          "properties": {
+            "file":       { "type": "string" },
+            "line":       { "type": "integer", "minimum": 1 },
+            "line_range": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 1 },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["snippet", "normalized"],
+          "properties": {
+            "snippet":    { "type": "string", "description": "Verbatim from file." },
+            "normalized": { "type": "string", "description": "Input to fingerprint hash." }
+          }
+        },
+        "explanation":     { "type": "string", "minLength": 1, "maxLength": 800 },
+        "fix_sketch":      { "type": "string", "minLength": 1, "maxLength": 600 },
+        "time_estimate":   { "$ref": "#/$defs/time_estimate" },
+        "tool_origin":     { "$ref": "#/$defs/tool_origin" },
+        "tool_warning_id": { "type": "string" },
+        "first_seen":      { "type": "string", "format": "date" },
+        "phase":           { "type": "integer", "minimum": 1, "maximum": 5 },
+        "ignored":         { "type": "boolean", "default": false },
+        "self_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": { "enum": ["verified", "unverified", "demoted", "promoted"] },
+            "notes":  { "type": ["string", "null"] }
+          }
+        },
+        "money_revalidation": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": { "enum": ["confirmed", "refined", "rejected", "promoted"] },
+                "notes":  { "type": "string" }
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    "ignored_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason"],
+      "properties": {
+        "id":              { "$ref": "#/$defs/finding_id" },
+        "reason":          { "type": "string", "minLength": 1 },
+        "expires_at":      { "type": "string", "format": "date" },
+        "acknowledged_by": { "type": "string" },
+        "expired":         { "type": "boolean", "default": false }
+      }
+    },
+
+    "tooling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ran", "missing"],
+      "properties": {
+        "ran":     { "type": "array", "items": { "$ref": "#/$defs/tool_status" } },
+        "missing": { "type": "array", "items": { "$ref": "#/$defs/tool_status" } },
+        "skipped": { "type": "array", "items": { "$ref": "#/$defs/tool_status" } }
+      }
+    },
+
+    "tool_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name":           { "type": "string" },
+        "tier":           { "type": "integer", "minimum": 1, "maximum": 3 },
+        "version":        { "type": "string" },
+        "findings_count": { "type": "integer", "minimum": 0 },
+        "reason":         { "type": "string", "description": "Why missing or skipped." }
+      }
+    },
+
+    "self_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calibration", "verified_blockers", "unverified_blockers"],
+      "properties": {
+        "calibration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "blocker_pct": { "type": "number", "minimum": 0, "maximum": 1 },
+            "high_pct":    { "type": "number", "minimum": 0, "maximum": 1 },
+            "warnings":    { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "verified_blockers":   { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
+        "unverified_blockers": { "type": "array", "items": { "$ref": "#/$defs/finding_id" } }
+      }
+    },
+
+    "trend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixed_ids", "new_ids", "persisted_ids"],
+      "properties": {
+        "prior_report_path":  { "type": "string" },
+        "prior_report_date":  { "type": "string", "format": "date" },
+        "fixed_ids":          { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
+        "new_ids":            { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
+        "persisted_ids":      { "type": "array", "items": { "$ref": "#/$defs/finding_id" } }
+      }
+    },
+
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "estimated_input_tokens":  { "type": "integer", "minimum": 0 },
+        "estimated_output_tokens": { "type": "integer", "minimum": 0 },
+        "actual_input_tokens":     { "type": ["integer", "null"], "minimum": 0 },
+        "actual_output_tokens":    { "type": ["integer", "null"], "minimum": 0 },
+        "budget_tokens":           { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "name", "estimated_effort", "rationale", "finding_ids"],
+      "properties": {
+        "phase":            { "type": "integer", "minimum": 1, "maximum": 5 },
+        "name":             { "type": "string" },
+        "estimated_effort": {
+          "type": "string",
+          "pattern": "^\\d+(–\\d+|-\\d+)?\\s*(m|h|d|w|mo)$",
+          "description": "Coarse human-readable effort: '5m', '1-2d', '1w', '1-3w'."
+        },
+        "rationale":        { "type": "string" },
+        "finding_ids":      { "type": "array", "items": { "$ref": "#/$defs/finding_id" } }
+      }
+    },
+
+    "coverage_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "risk_weight"],
+      "properties": {
+        "path":         { "type": "string" },
+        "files":        { "type": "integer", "minimum": 0 },
+        "with_spec":    { "type": "integer", "minimum": 0 },
+        "line_cov":     { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "branch_cov":   { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "risk_weight":  { "enum": ["critical", "high", "medium", "low"] },
+        "notes":        { "type": "string" }
+      }
+    },
+
+    "hotspot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "loc", "layer"],
+      "properties": {
+        "file":      { "type": "string" },
+        "loc":       { "type": "integer", "minimum": 0 },
+        "layer":     { "type": "string" },
+        "has_spec":  { "enum": ["yes", "no", "partial"] },
+        "churn_30d": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    }
+  }
+}
