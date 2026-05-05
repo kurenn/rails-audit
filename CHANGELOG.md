@@ -4,6 +4,32 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-05
+
+First release as an installable Claude Code plugin. Audit content unchanged from 0.2.0.
+
+### Added
+
+- `.claude-plugin/plugin.json` manifest. Install via marketplace:
+  ```bash
+  claude plugin marketplace add kurenn/marketplace
+  claude plugin install rails-audit@kurenn
+  ```
+
+### Changed
+
+- Repo restructured into plugin layout: `SKILL.md` and all referenced files
+  (`dimensions/`, `schema/`, `examples/`, `prompts.md`, `rubric.md`,
+  `tooling.md`, `output-template.md`) moved under `skills/rails-audit/`.
+- `bin/`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `.github/` stay at repo root.
+- Internal references in `SKILL.md` keep their relative paths and continue to work.
+
+### Migration
+
+If you were copying `SKILL.md` into `~/.claude/skills/rails-audit/` by hand,
+switch to the marketplace install above. The standalone install pattern still
+works — copy `skills/rails-audit/` (the new path) instead of the repo root.
+
 ## [0.2.0] — 2026-05-05
 
 Major refinement informed by the v0.1 dogfood against influapp-api. JSON becomes the source of truth for reports; markdown is rendered from it. The skill now polices its own output (self-check), supports finding-level trend tracking, scoped audits, and acknowledged-finding suppression. 11 PRs across 4 phases.

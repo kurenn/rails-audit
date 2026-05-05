@@ -1,0 +1,15 @@
+{
+  "name": "rails-audit",
+  "version": "0.3.0",
+  "description": "Comprehensive Rails project stability audit across 18 dimensions — foundation, domain, specs, deploy/CI, security, money paths, code health, performance, reliability, observability, jobs, data integrity, governance, DX, cost. Read-only — produces a severity-ranked markdown report.",
+  "author": {
+    "name": "Abraham Kuri",
+    "email": "abkuri88@gmail.com",
+    "url": "https://github.com/kurenn"
+  },
+  "homepage": "https://github.com/kurenn/rails-audit",
+  "repository": "https://github.com/kurenn/rails-audit",
+  "license": "MIT",
+  "keywords": ["rails", "ruby", "audit", "code-review", "security", "claude-code"],
+  "skills": "./skills"
+}
