@@ -301,6 +301,11 @@
             }
           ],
           "description": "Same shape as money_revalidation; populated by Step 4.6 (security revalidation). Added v0.4."
+        },
+        "severity_inherited_from": {
+          "type": "string",
+          "pattern": "^f-[0-9a-f]{12,64}$",
+          "description": "When set, this finding is a consequence of the cited root-cause finding (e.g., a CVE inherited from EOL Rails). Severity has been demoted by one tier from its raw value; the trend tracks the root finding's lifecycle. Added v0.5."
         }
       }
     },

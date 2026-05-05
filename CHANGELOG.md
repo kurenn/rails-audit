@@ -4,6 +4,15 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.5 milestone PR#1 — Severity inheritance for EOL-derived CVEs)
+
+- New schema field: `findings[].severity_inherited_from` (additive, optional, finding_id format). When set, the finding is a consequence of the cited root-cause finding and has been demoted by one tier.
+- New dimension file `dimensions/severity-inheritance.md` documents the four detection conditions, the inheritance roster (Rails-bundled + Ruby-adjacent gems), the demotion floor (severity=`low`), and the render rules (nested under root, not separate punch-list entries).
+- New SKILL.md Step 4.7 between revalidations and self-check.
+- **Dogfood evidence on influapp v0.4 → v0.5**: 51 of 97 findings demoted via inheritance from the Ruby/Rails EOL root. `blocker_pct` dropped from 26.8% → 11.3%; `high_pct` dropped from 62.9% → 42.3%. The remaining 13 bundle-audit findings (out of 64) didn't inherit because their gems aren't on the conservative roster (Stripe, AWS-SDK, etc.) — correct behavior.
+- coba v0.5 unchanged: zero EOL findings to inherit from (Rails 7.1, Ruby 3.3.7 are both supported).
+- Closes #50.
+
 ## [0.4.0] — 2026-05-05
 
 > The v0.3 milestone shipped under this version number — v0.3.0 was already used for the plugin-restructure release on the same day. Ten PRs across calibration + synthesis quality + ergonomics + polish phases, driven by the v0.2 dogfood evidence on influapp + coba.
