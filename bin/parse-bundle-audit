@@ -1,0 +1,117 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/parse-bundle-audit — read bundle-audit text output and emit finding stubs.
+#
+# Usage:
+#   bin/parse-bundle-audit                          # read default path
+#   bin/parse-bundle-audit <path>                   # custom path
+#   bin/parse-bundle-audit --table                  # human-readable
+#   bin/parse-bundle-audit --help
+#
+# bundle-audit emits text records like:
+#   Name: rails
+#   Version: 7.0.4
+#   CVE: CVE-2024-12345
+#   GHSA: GHSA-...
+#   Criticality: High
+#   URL: ...
+#   Title: ...
+#   Solution: ...
+#
+# Each becomes a finding stub.
+
+require 'json'
+
+DEFAULT_PATH = 'tmp/rails-audit/bundle-audit.txt'
+
+CRITICALITY_MAP = {
+  'critical' => 'blocker',
+  'high'     => 'blocker',
+  'medium'   => 'high',
+  'low'      => 'medium',
+  'unknown'  => 'high', # be conservative
+  'info'     => 'low'
+}.freeze
+
+def parse_records(text)
+  records = []
+  current = {}
+  text.each_line do |line|
+    line = line.chomp
+    if line.empty?
+      records << current unless current.empty?
+      current = {}
+    elsif line =~ /^(Name|Version|CVE|GHSA|Criticality|URL|Title|Solution|Patched [Vv]ersions): (.+)$/
+      key, value = Regexp.last_match(1), Regexp.last_match(2)
+      current[key.downcase.gsub(/\s+/, '_').to_sym] = value
+    end
+  end
+  records << current unless current.empty?
+  records.reject { |r| r[:name].nil? }
+end
+
+def to_finding_stub(record, idx)
+  severity = CRITICALITY_MAP[(record[:criticality] || 'unknown').downcase] || 'high'
+  cve = record[:cve] || record[:ghsa] || 'unknown-id'
+  fp_seed = "deps|Gemfile.lock|#{record[:name]}|#{record[:version]}|#{cve}"
+
+  {
+    id: "f-ba-#{format('%04d', idx + 1)}-#{fp_seed.sum.to_s(16)[0..7]}",
+    severity: severity,
+    primary_dimension: 'security-and-authz',
+    secondary_dimensions: ['foundation'],
+    title: "Vulnerable dependency: #{record[:name]} #{record[:version]} (#{cve})",
+    location: { file: 'Gemfile.lock' },
+    evidence: {
+      snippet: "#{record[:name]} (#{record[:version]}) — #{record[:title] || cve}",
+      normalized: "bundle_audit_#{record[:name]}_#{record[:version]}_#{cve}"
+    },
+    explanation: "bundle-audit advisory #{cve}#{record[:url] ? " (#{record[:url]})" : ''}: #{record[:title] || 'no title'}. Severity: #{record[:criticality] || 'unknown'}.",
+    fix_sketch: record[:solution] ? "Update #{record[:name]} per advisory: #{record[:solution]}" : "Update #{record[:name]} to a non-vulnerable version (consult #{cve}).",
+    time_estimate: severity == 'blocker' ? '1h' : '5m',
+    tool_origin: 'bundle-audit',
+    tool_warning_id: cve,
+    phase: severity == 'blocker' ? 1 : 4,
+    ignored: false,
+    self_check: { status: 'verified', notes: "bundle-audit advisory #{cve}" }
+  }
+end
+
+def render_table(stubs)
+  if stubs.empty?
+    puts 'No bundle-audit findings.'
+    return
+  end
+  rows = stubs.map do |s|
+    [s[:severity].upcase, s[:tool_warning_id], s[:title].slice(0, 70)]
+  end
+  widths = [0, 1, 2].map { |i| [%w[Severity ID Title][i].length, *rows.map { |r| r[i].to_s.length }].max }
+  fmt = widths.map { |w| "%-#{w}s" }.join('  ')
+  puts(format(fmt, 'Severity', 'ID', 'Title'))
+  puts(widths.map { |w| '-' * w }.join('  '))
+  rows.each { |r| puts(format(fmt, *r)) }
+end
+
+def main(argv)
+  return puts(File.foreach(__FILE__).take(13).map { |l| l.sub(/^#\s?/, '') }.join) if argv.include?('--help') || argv.include?('-h')
+
+  table_mode = argv.delete('--table')
+  path = argv.first || DEFAULT_PATH
+
+  unless File.exist?(path)
+    warn "bundle-audit output not found at #{path}. Run: bundle audit check --update > #{path}"
+    exit 2
+  end
+
+  records = parse_records(File.read(path))
+  stubs = records.map.with_index { |r, i| to_finding_stub(r, i) }
+
+  if table_mode
+    render_table(stubs)
+  else
+    puts JSON.pretty_generate(stubs)
+  end
+end
+
+main(ARGV.dup) if __FILE__ == $PROGRAM_NAME

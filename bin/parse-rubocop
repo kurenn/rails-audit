@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/parse-rubocop — read rubocop --format json output and emit aggregate stats.
+#
+# Usage:
+#   bin/parse-rubocop                          # read default path; emit JSON aggregate
+#   bin/parse-rubocop <path>
+#   bin/parse-rubocop --table                  # human-readable
+#   bin/parse-rubocop --help
+#
+# Unlike parse-brakeman / parse-bundle-audit, this does NOT emit individual
+# findings — RuboCop offenses are noise as findings. Instead, it aggregates
+# into the shape of `appendices.rubocop_offenses` in report.schema.json.
+
+require 'json'
+
+DEFAULT_PATH = 'tmp/rails-audit/rubocop.json'
+
+def aggregate(json)
+  files = json['files'] || []
+  by_severity = Hash.new(0)
+  by_cop      = Hash.new(0)
+  total = 0
+
+  files.each do |f|
+    (f['offenses'] || []).each do |o|
+      total += 1
+      by_severity[o['severity']] += 1
+      by_cop[o['cop_name']] += 1
+    end
+  end
+
+  top_cops = by_cop.sort_by { |_k, v| -v }.first(5).map(&:first)
+  {
+    total: total,
+    by_severity: by_severity,
+    top_categories: top_cops
+  }
+end
+
+def render_table(agg)
+  puts "RuboCop aggregate (#{agg[:total]} offenses)"
+  puts '---'
+  agg[:by_severity].sort_by { |_k, v| -v }.each do |sev, count|
+    puts "  #{sev}: #{count}"
+  end
+  puts ''
+  puts 'Top cops:'
+  agg[:top_categories].each { |c| puts "  - #{c}" }
+end
+
+def main(argv)
+  return puts(File.foreach(__FILE__).take(13).map { |l| l.sub(/^#\s?/, '') }.join) if argv.include?('--help') || argv.include?('-h')
+
+  table_mode = argv.delete('--table')
+  path = argv.first || DEFAULT_PATH
+
+  unless File.exist?(path)
+    warn "rubocop.json not found at #{path}. Run: rubocop --format json --out #{path}"
+    exit 2
+  end
+
+  json = JSON.parse(File.read(path))
+  agg = aggregate(json)
+
+  if table_mode
+    render_table(agg)
+  else
+    puts JSON.pretty_generate(agg)
+  end
+end
+
+main(ARGV.dup) if __FILE__ == $PROGRAM_NAME

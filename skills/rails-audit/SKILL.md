@@ -203,6 +203,22 @@ mkdir -p tmp/rails-audit
 
 Then run available tools in parallel Bash calls. Skip silently if not installed (note absence in the report's tooling section). For Bundler-managed tools, prefix with `bundle exec` if Gemfile lists them; otherwise try the bare command.
 
+**v0.4 — parse tool output via `bin/parse-*` scripts.** After the tools finish, invoke the parsers to convert raw output into ready-to-merge finding stubs:
+
+```bash
+bin/parse-brakeman      tmp/rails-audit/brakeman.json     > tmp/rails-audit/brakeman-stubs.json
+bin/parse-bundle-audit  tmp/rails-audit/bundle-audit.txt  > tmp/rails-audit/bundle-audit-stubs.json
+bin/parse-rubocop       tmp/rails-audit/rubocop.json      > tmp/rails-audit/rubocop-aggregate.json
+```
+
+The brakeman + bundle-audit stubs go into `findings[]` during synthesis (Step 4). The rubocop aggregate goes into `appendices.rubocop_offenses`. Each parser:
+- Emits JSON shaped to match the report schema's `findings[]` (or `appendices.*`).
+- Filters known false positives (`parse-brakeman` drops array-form `Open3.capture3` — argv, no shell).
+- Maps tool-specific severity to the rubric's 4-tier scale.
+- Generates stable fingerprints prefixed `f-bk-` (brakeman), `f-ba-` (bundle-audit) so the same warning produces the same id across runs (good for trend tracking).
+
+Synthesis (Step 4) then merges parser stubs with agent findings, dedupes by fingerprint and by `(file, line, finding_type)` overlap.
+
 ### Step 3. Fan out to subagents
 
 Launch up to **4 Explore agents IN PARALLEL** (single message, multiple Agent calls). When `audit.scope` is narrower than `all`, skip clusters whose dimensions are entirely outside the scope (see "Scope arguments" → cluster mapping). Clusters that have at least one in-scope dimension still run, but the agent brief instructs them to focus on the in-scope subset only.

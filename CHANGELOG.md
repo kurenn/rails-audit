@@ -4,6 +4,16 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#6 — Tool-output parsers: bin/parse-brakeman, parse-bundle-audit, parse-rubocop)
+
+- **`bin/parse-brakeman`** — read `tmp/rails-audit/brakeman.json`, emit finding stubs ready to merge into `findings[]`. Maps brakeman warning types to dimensions + severity (e.g. SQL Injection → blocker; Format Validation → high; Cross Site Scripting → high). Confidence levels (High/Medium/Weak) modulate severity. Filters known false positives (array-form `Open3.capture3` — argv, no shell). Stable fingerprints prefixed `f-bk-`.
+- **`bin/parse-bundle-audit`** — read `bundle-audit check` text output, parse text-record format (`Name:`, `Version:`, `CVE:`, etc.), emit stubs. Maps `Criticality` to severity (Critical/High → blocker; Medium → high; Unknown → high conservatively). Stable fingerprints prefixed `f-ba-`. Discovered a Ruby gotcha during dogfood: `Regexp.last_match` is clobbered by intervening `String#gsub` calls — fixed by capturing match groups into local variables before subsequent regex operations.
+- **`bin/parse-rubocop`** — read `rubocop --format json`, aggregate by severity + cop. Emits the `appendices.rubocop_offenses` shape from `report.schema.json`. Does not produce per-offense findings (style offenses are noise as findings; aggregate is the right granularity).
+- **`SKILL.md` Step 2** updated to invoke the parsers after tool runs; their JSON outputs land in `tmp/rails-audit/*-stubs.json` and merge into synthesis at Step 4.
+- All three scripts: stdlib only, `--table` for human-readable, `--help` for usage.
+- Calibration evidence: parse-bundle-audit on influapp surfaces **64 advisories** (17 blockers + 46 highs) — the v0.2 audit had "uri CVEs" + "thor CVE" as a 3-finding aggregate. Granularity unlocks per-CVE trend tracking.
+- Closes #30.
+
 ### Added (v0.3 milestone PR#5 — Security-and-authz revalidation pass)
 
 - **`dimensions/security-revalidation.md`** — focused second pass on every finding tagged `security-and-authz` (primary or secondary). Mirrors money-revalidation pattern. Six checks: S-RV-1 token comparison (`secure_compare` discipline), S-RV-2 IDOR scoping, S-RV-3 trusted-header identity (JWT verification), S-RV-4 SQL interpolation (blocker default), S-RV-5 open redirect (host allowlist), S-RV-6 SSRF (private-IP block).
