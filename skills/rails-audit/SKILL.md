@@ -310,6 +310,30 @@ For each finding in scope:
 
 Re-validation never modifies `id`, `primary_dimension`, or `secondary_dimensions[]`. Schema field `findings[].money_revalidation` is already defined as nullable in `schema/report.schema.json` from PR#1; the template renders `_Re-validated: <status>_` next to fix sketches.
 
+### Step 4.7. Apply severity inheritance (added v0.5)
+
+After revalidations but before self-check, apply severity inheritance: when N findings are consequences of one root-cause finding, demote them by one tier and link them with `severity_inherited_from`.
+
+**Detection** — a finding is *inherited* when ALL of:
+
+1. Its `tool_origin` is `bundle-audit` (CVEs aggregated from gemfile lock).
+2. Its `primary_dimension` or `secondary_dimensions` contains `foundation`.
+3. The finding's gem is part of the Rails or Ruby stack (rack, actionpack, actionview, loofah, nokogiri, ruby itself, etc. — see `dimensions/severity-inheritance.md` for the full root-coverage list).
+4. There exists a root-cause finding in the same report with `tool_warning_id: "unmaintained_dependency"` covering Rails or Ruby (Brakeman's EOL flags).
+
+**Action**:
+- Set `findings[<id>].severity_inherited_from = <root_id>`.
+- Demote `severity` by one tier: blocker → high, high → medium, medium → low, low → low.
+- Append to `findings[<id>].self_check.notes`: `"Demoted by inheritance from <root_id> (foundation upgrade fixes this)."`
+
+**Why**: influapp v0.4 surfaced 17 blocker + 46 high CVEs all inherited from Rails 7.0.4 EOL. Each is technically real but landing one foundation-upgrade PR fixes all 63. Without inheritance, they look like 63 distinct concerns. With inheritance, they're consequences of finding B1 (Ruby/Rails EOL) and the punch list says so.
+
+**Render**: inherited findings render under the root-cause finding's punch-list entry as a nested table or sub-list, NOT as separate top-level entries. The aggregate count is still surfaced ("63 CVEs inherited from B1") so the work scope is visible.
+
+**Trend interaction**: if the root-cause finding is `fixed` in a future audit, all inherited children automatically resolve. Trend reports them collectively under the root, not individually.
+
+See `dimensions/severity-inheritance.md` for the full coverage list, edge cases, and when NOT to inherit.
+
 ### Step 4.6. Security-and-authz revalidation (added v0.4)
 
 After money revalidation (Step 4.5), run a focused second pass on every finding tagged `security-and-authz` (in `primary_dimension` OR `secondary_dimensions[]`). See `dimensions/security-revalidation.md` for the full checklist.

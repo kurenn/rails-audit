@@ -128,6 +128,57 @@ Hard floor: budget < 5,000 tokens is rejected at parse time (no audit can fit).
 
 ---
 
+## Live token accounting (added v0.5)
+
+When the Claude Code harness exposes per-call token usage (via `usage` metadata on tool results, or via a documented runtime hook), the skill SHOULD populate `cost.actual_input_tokens` and `cost.actual_output_tokens` from those values rather than leaving them `null`.
+
+### Capture points
+
+The skill consumes tokens at three known points:
+
+1. **Bash tool invocations** for static tooling (Steps 1-2). These are usually small — most tool output goes to `tmp/rails-audit/` and is read back via Read tool, not piped through the model.
+2. **Agent fan-out** (Step 3). 4 parallel Explore agents, each with its own input/output usage. Agents report a final summary back; the harness exposes their token counts.
+3. **Synthesis + render** (Steps 4-7). The skill itself reads dimension files, parses tool outputs, and emits JSON + markdown. Self-attributed.
+
+### Contract for v0.5
+
+When usage data is available, accumulate:
+
+```
+actual_input_tokens  = sum(input_tokens  across all model calls during the audit)
+actual_output_tokens = sum(output_tokens across all model calls during the audit)
+```
+
+Write the totals into `cost.actual_input_tokens` and `cost.actual_output_tokens` at Step 7 (write outputs).
+
+When the harness does NOT expose usage:
+
+- Leave `actual_*` fields as `null` (current behavior).
+- Render `—` in Appendix E's actual column.
+- Note in the audit log: `audit.ignore_warnings += ["Live token accounting unavailable in this harness; cost.actual_* left null."]`
+
+### What this enables
+
+- **Cost calibration**: with actuals captured across N audits, the cost-estimation heuristic constants can be tuned more precisely. Replaces the v0.4 estimate-vs-influapp-prior comparison with real data.
+- **Budget enforcement** (`--budget=<N>`): can compare actual usage to budget mid-run rather than estimating remaining capacity from agent count.
+- **Per-step attribution**: future v0.6+ may break down actual usage per workflow step, exposing which steps dominate cost.
+
+### What this doesn't do
+
+- **Does not bill or charge**. Records and reports only.
+- **Does not retry within budget**. If a tool fails and retry would exceed budget, the failure stays.
+- **Does not extract usage from non-Claude harnesses**. The Anthropic SDK exposes usage in a documented format; other LLM SDKs (OpenAI, Bedrock) would need their own adapters. Out of scope; the skill is Claude-Code-native.
+
+### Configuration
+
+`.claude/rails-audit.yml`:
+
+```yaml
+capture_actual_tokens: true   # default — capture when available
+```
+
+CLI override: `--no-token-accounting` disables the capture for one run.
+
 ## Cost appendix in the report
 
 The schema already supports `cost{}` from PR#1. Populated fields:

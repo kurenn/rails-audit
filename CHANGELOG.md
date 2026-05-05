@@ -4,6 +4,91 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-05
+
+Calibration round 2 driven by the v0.2→v0.4 benchmark on influapp + coba. Six PRs across calibration, parser completion, and pre-commit integration.
+
+### Highlights
+
+- **Severity inheritance for EOL CVEs** — when N findings are consequences of one root-cause finding (e.g., 64 bundle-audit CVEs all inherited from EOL Rails), each gets demoted by one tier and linked via `severity_inherited_from`. influapp dogfood: 51 demoted, blocker_pct 26.8% → 11.3%.
+- **C2 threshold raised** from 25% → 30% based on coba evidence (29.4% legitimate blockers post-secrets-scanner).
+- **Complete Tier-2 parser set** — `bin/parse-reek` and `bin/parse-rails-best-practices` join the existing rubocop/brakeman/bundle-audit parsers. All Tier-1 and Tier-2 tools from `tooling.md` now have aggregate-or-finding parsers.
+- **Live token accounting contract** — documented how the skill consumes harness-exposed per-call usage to populate `cost.actual_*` when available; null fallback when not.
+- **`bin/install-hooks`** — pre-commit integration for `bin/scan-secrets --strict`. Closes the audit-catches-existing / hook-prevents-new loop.
+- **`docs/lessons-learned.md`** — 8 build insights from the v0.3-v0.5 milestone work that should outlive any single CHANGELOG entry.
+
+### PRs
+
+| PR | Title |
+|---|---|
+| #57 | Severity inheritance for EOL-derived CVEs |
+| #58 | C2 threshold: 25% → 30% |
+| #59 | docs/lessons-learned.md |
+| #60 | Complete parser set: parse-reek + parse-rails-best-practices |
+| #61 | Live token accounting contract |
+| #62 | bin/install-hooks for pre-commit secrets scan |
+
+### Schema additions (all backwards-compatible)
+
+- `findings[].severity_inherited_from` (string, optional, finding_id ref).
+- `appendices.code_smells` (from parse-reek).
+- `appendices.rails_best_practices` (from parse-rails-best-practices).
+
+v0.2-v0.4 reports validate clean against the v0.5 schema.
+
+### Calibration evidence captured
+
+| Metric | influapp v0.4 | influapp v0.5 | coba v0.4 | coba v0.5 |
+|---|---|---|---|---|
+| `blocker_pct` | 26.8% | **11.3%** | 29.4% | 29.4% |
+| `high_pct` | 62.9% | **42.3%** | 41.2% | 41.2% |
+| C2 fires (30% threshold) | n/a | no ✓ | n/a | no ✓ |
+| Skill ships? | yes (C7 override) | yes (clean) | no (block) | no (block — concentrated breakage genuinely warrants it) |
+
+### Added (v0.5 milestone PR#6 — bin/install-hooks for pre-commit secrets scan)
+
+- **`bin/install-hooks`** — bash script that wires `bin/scan-secrets --strict` into `.git/hooks/pre-commit`. Modes: install (default), `--uninstall`, `--dry-run`, `--help`.
+- The hook block is fenced with begin/end markers so install-hooks can find and remove its own block without touching other hook content. Composable with existing pre-commit setups.
+- Bypass for one commit via `git commit --no-verify` (documented in the install message).
+- The audit catches existing tracked secrets (Step 1.5 scan); the pre-commit hook prevents new ones — closes the loop.
+- Closes #56.
+
+### Added (v0.5 milestone PR#5 — Live token accounting contract)
+
+- New "Live token accounting" section in `dimensions/cost-estimation.md` documenting how the skill populates `cost.actual_input_tokens` / `cost.actual_output_tokens` when the harness exposes per-call usage metadata. Three capture points: Bash tool invocations, agent fan-out, synthesis/render.
+- When usage is unavailable, fields stay `null` and `audit.ignore_warnings` notes the gap (current behavior, now documented).
+- `capture_actual_tokens: true` in `.claude/rails-audit.yml` default; `--no-token-accounting` CLI override.
+- Out of scope (documented): non-Claude harness adapters, billing, per-step breakdown.
+- Closes #55.
+
+### Added (v0.5 milestone PR#4 — bin/parse-reek + bin/parse-rails-best-practices)
+
+- **`bin/parse-reek`** — reads reek `-f json` output, aggregates by smell type and top affected files. Aggregate-only (per-smell findings would be noise). Emits the `appendices.code_smells` shape.
+- **`bin/parse-rails-best-practices`** — reads rails_best_practices `--format json` output, aggregates by check name and top files. Emits the `appendices.rails_best_practices` shape.
+- Schema additions (additive): `appendices.code_smells` and `appendices.rails_best_practices` with `total`, `top_*` arrays.
+- Both follow the parse-rubocop pattern: aggregate, never per-finding. The Tier-2 parser set is now complete (parse-rubocop, parse-reek, parse-rails-best-practices). Together with parse-brakeman + parse-bundle-audit, every Tier-1 and Tier-2 tool from `tooling.md` has a parser.
+- Closes #53, #54.
+
+### Added (v0.5 milestone PR#3 — docs/lessons-learned.md)
+
+- New `docs/lessons-learned.md` capturing 8 build insights from the v0.3-v0.5 milestone work that should outlive any single CHANGELOG entry: the Ruby gsub/last_match gotcha, the C7 dimension-≤4 heuristic, the 25→30% blocker-pct paradox, why JSON-first matters, the bundle-audit-explosion-plus-inheritance pattern, the v0.3.0-as-plugin-restructure surprise, what was hardest to get right, and what I'd do differently next time.
+- Closes #52.
+
+### Changed (v0.5 milestone PR#2 — C2 threshold: 25% → 30%)
+
+- C2 (blocker over-use) threshold raised from `> 0.25` to `> 0.30` in `dimensions/self-check.md`.
+- Calibration note added explaining the bump: coba's v0.4 dogfood had 29.4% blockers post-secrets-scanner, all correctly tagged per rubric. Old threshold spuriously blocked. 30% is a realistic ceiling.
+- Closes #51.
+
+### Added (v0.5 milestone PR#1 — Severity inheritance for EOL-derived CVEs)
+
+- New schema field: `findings[].severity_inherited_from` (additive, optional, finding_id format). When set, the finding is a consequence of the cited root-cause finding and has been demoted by one tier.
+- New dimension file `dimensions/severity-inheritance.md` documents the four detection conditions, the inheritance roster (Rails-bundled + Ruby-adjacent gems), the demotion floor (severity=`low`), and the render rules (nested under root, not separate punch-list entries).
+- New SKILL.md Step 4.7 between revalidations and self-check.
+- **Dogfood evidence on influapp v0.4 → v0.5**: 51 of 97 findings demoted via inheritance from the Ruby/Rails EOL root. `blocker_pct` dropped from 26.8% → 11.3%; `high_pct` dropped from 62.9% → 42.3%. The remaining 13 bundle-audit findings (out of 64) didn't inherit because their gems aren't on the conservative roster (Stripe, AWS-SDK, etc.) — correct behavior.
+- coba v0.5 unchanged: zero EOL findings to inherit from (Rails 7.1, Ruby 3.3.7 are both supported).
+- Closes #50.
+
 ## [0.4.0] — 2026-05-05
 
 > The v0.3 milestone shipped under this version number — v0.3.0 was already used for the plugin-restructure release on the same day. Ten PRs across calibration + synthesis quality + ergonomics + polish phases, driven by the v0.2 dogfood evidence on influapp + coba.
@@ -213,7 +298,8 @@ Initial release.
 - Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
 - Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
 
-[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.2.0

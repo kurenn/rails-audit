@@ -75,6 +75,25 @@
         "risk_hotspots": {
           "type": "array",
           "items": { "$ref": "#/$defs/hotspot" }
+        },
+        "code_smells": {
+          "type": "object",
+          "description": "Aggregate from bin/parse-reek. Added v0.5.",
+          "properties": {
+            "total":         { "type": "integer", "minimum": 0 },
+            "by_smell_type": { "type": "object", "additionalProperties": { "type": "integer" } },
+            "top_smells":    { "type": "array", "items": { "type": "object", "properties": { "type": { "type": "string" }, "count": { "type": "integer" } } } },
+            "top_files":     { "type": "array", "items": { "type": "object", "properties": { "file": { "type": "string" }, "count": { "type": "integer" } } } }
+          }
+        },
+        "rails_best_practices": {
+          "type": "object",
+          "description": "Aggregate from bin/parse-rails-best-practices. Added v0.5.",
+          "properties": {
+            "total":      { "type": "integer", "minimum": 0 },
+            "top_checks": { "type": "array", "items": { "type": "object", "properties": { "check": { "type": "string" }, "count": { "type": "integer" } } } },
+            "top_files":  { "type": "array", "items": { "type": "object", "properties": { "file": { "type": "string" }, "count": { "type": "integer" } } } }
+          }
         }
       }
     }
@@ -301,6 +320,11 @@
             }
           ],
           "description": "Same shape as money_revalidation; populated by Step 4.6 (security revalidation). Added v0.4."
+        },
+        "severity_inherited_from": {
+          "type": "string",
+          "pattern": "^f-[0-9a-f]{12,64}$",
+          "description": "When set, this finding is a consequence of the cited root-cause finding (e.g., a CVE inherited from EOL Rails). Severity has been demoted by one tier from its raw value; the trend tracks the root finding's lifecycle. Added v0.5."
         }
       }
     },

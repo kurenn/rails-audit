@@ -1,0 +1,75 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/parse-rails-best-practices — read rails_best_practices output and emit aggregate stats.
+#
+# Usage:
+#   bin/parse-rails-best-practices                          # read default path; emit JSON
+#   bin/parse-rails-best-practices <path>
+#   bin/parse-rails-best-practices --table                  # human-readable
+#   bin/parse-rails-best-practices --help
+#
+# rails_best_practices supports JSON via `--format json`. Output is an array
+# of `{filename, line_number, message, url}` objects. We aggregate by message
+# (which encodes the check name).
+#
+# Aggregate-only — surfaces top categories into appendices.rails_best_practices,
+# not as per-finding entries.
+
+require 'json'
+
+DEFAULT_PATH = 'tmp/rails-audit/rails-best-practices.json'
+
+def aggregate(json)
+  entries = json.is_a?(Array) ? json : json['errors'] || []
+  total = entries.size
+  by_check = Hash.new(0)
+  by_file  = Hash.new(0)
+  entries.each do |e|
+    # Extract a check label from the message (strip leading file:line: prefix if present)
+    raw = e['message'] || 'unknown check'
+    label = raw.sub(/\A.+?:\s*/, '').slice(0, 100)
+    by_check[label] += 1
+    by_file[e['filename'] || 'unknown'] += 1
+  end
+  top_checks = by_check.sort_by { |_k, v| -v }.first(10).map { |k, v| { check: k, count: v } }
+  top_files  = by_file.sort_by  { |_k, v| -v }.first(5).map  { |k, v| { file: k, count: v } }
+  {
+    total: total,
+    top_checks: top_checks,
+    top_files: top_files
+  }
+end
+
+def render_table(agg)
+  puts "rails_best_practices aggregate (#{agg[:total]} suggestions)"
+  puts '---'
+  puts 'Top checks:'
+  agg[:top_checks].each { |c| puts "  #{c[:count].to_s.rjust(4)}  #{c[:check]}" }
+  puts ''
+  puts 'Top affected files:'
+  agg[:top_files].each { |f| puts "  #{f[:count].to_s.rjust(4)}  #{f[:file]}" }
+end
+
+def main(argv)
+  return puts(File.foreach(__FILE__).take(15).map { |l| l.sub(/^#\s?/, '') }.join) if argv.include?('--help') || argv.include?('-h')
+
+  table_mode = argv.delete('--table')
+  path = argv.first || DEFAULT_PATH
+
+  unless File.exist?(path)
+    warn "rails_best_practices output not found at #{path}. Run: rails_best_practices --format json --output-file #{path} ."
+    exit 2
+  end
+
+  json = JSON.parse(File.read(path))
+  agg = aggregate(json)
+
+  if table_mode
+    render_table(agg)
+  else
+    puts JSON.pretty_generate(agg)
+  end
+end
+
+main(ARGV.dup) if __FILE__ == $PROGRAM_NAME
