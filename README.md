@@ -57,17 +57,39 @@ This skill takes the opposite approach. It invokes the existing Rails tooling ec
 
 ## Installation
 
-Clone into your Claude Code skills directory:
+### Recommended — via the kurenn marketplace
 
 ```bash
-git clone https://github.com/kurenn/rails-audit.git ~/.claude/skills/rails-audit
+claude plugin marketplace add kurenn/marketplace   # one-time per user
+claude plugin install rails-audit@kurenn           # one-time install
 ```
 
-Or as a project-scoped skill:
+After install, restart your Claude Code session and `/rails-audit` appears in the slash menu.
+
+Pull updates with:
 
 ```bash
-git clone https://github.com/kurenn/rails-audit.git .claude/skills/rails-audit
+claude plugin marketplace update kurenn
+claude plugin update rails-audit
 ```
+
+### Local plugin dir (development)
+
+```bash
+git clone https://github.com/kurenn/rails-audit ~/workspace/rails-audit
+claude --plugin-dir ~/workspace/rails-audit
+```
+
+### Manual install (legacy, pre-plugin layout)
+
+If you're on a Claude Code version that predates plugin support, clone directly into the skills directory:
+
+```bash
+git clone https://github.com/kurenn/rails-audit.git ~/.claude/skills/rails-audit-legacy
+# Then move skills/rails-audit/ contents to the right place, or update the path
+```
+
+> As of 0.3.0 the skill content lives under `skills/rails-audit/` (plugin layout). Older clones expecting it at the repo root won't find SKILL.md anymore.
 
 ## Usage
 
@@ -94,7 +116,7 @@ bin/check-tools --json           # machine-readable (matches the report.json `to
 bin/check-tools --required-only  # exits 1 if any Tier-1 tool is missing — useful as a CI pre-flight
 ```
 
-Run from any Rails project root with the skill installed at `~/.claude/skills/rails-audit`. Reads `tooling.md` for tier definitions, then detects each tool by Gemfile presence + binary in PATH.
+Run from any Rails project root. After plugin install, the script lives at `~/.claude/plugins/cache/kurenn/rails-audit/<version>/bin/check-tools` (or wherever Claude caches plugins on your system). Reads `tooling.md` for tier definitions, then detects each tool by Gemfile presence + binary in PATH.
 
 ## Project profile (optional)
 
@@ -149,7 +171,7 @@ The skill applies a strict 4-tier rubric:
 - **Medium** — correctness/perf risk under load or growth
 - **Low** — hygiene & maintainability
 
-See [`rubric.md`](rubric.md) for full definitions and calibration examples.
+See [`skills/rails-audit/rubric.md`](skills/rails-audit/rubric.md) for full definitions and calibration examples.
 
 ## What it deliberately doesn't do
 
@@ -160,7 +182,7 @@ See [`rubric.md`](rubric.md) for full definitions and calibration examples.
 
 ## Sample output
 
-See [`examples/sample-report.md`](examples/sample-report.md) for a redacted real-world report.
+See [`skills/rails-audit/examples/sample-report.md`](skills/rails-audit/examples/sample-report.md) for a redacted real-world report.
 
 ## Contributing
 
