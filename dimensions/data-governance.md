@@ -130,6 +130,14 @@ Each → **Medium** (or **High** for password/token leaking into logs).
 
 This is rarely visible in the repo; surface as "verify with user" unless IAM config is in repo (Terraform / Pulumi).
 
+## Cross-cuts
+
+- **`security-and-authz`** — encryption at rest, PII in logs, secrets handling cross both.
+- **`observability`** — PII in custom log lines and error tracker payloads cross with observability.
+- **`data-integrity`** — soft-delete on PII tables, retention policies cross with integrity.
+- **`money-and-payments`** — audit trail on money mutations is governance primary; money secondary.
+- **`deploy-and-ci`** — prod-points-at-staging or unencrypted secrets in workflows are deploy *and* governance.
+
 ## Severity calibration
 
 | Pattern | Default tier |

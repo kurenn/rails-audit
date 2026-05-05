@@ -149,6 +149,14 @@ grep -rn "trap\|Signal\.trap" config/ app/ --include="*.rb"
 grep -E "worker_timeout|worker_boot_timeout" config/puma.rb
 ```
 
+## Cross-cuts
+
+- **`background-jobs`** — pool sizing, retries, timeouts are jobs-relevant *and* reliability.
+- **`money-and-payments`** — Stripe SDK timeouts, idempotency, graceful degradation cross with money.
+- **`observability`** — APM presence, slow-query visibility, alerting are observability primary; tag perf secondary.
+- **`deploy-and-ci`** — DB pool sizing vs Cloud Run concurrency is a deploy concern with perf consequences.
+- **`code-smells`** — `.count` in serializers, `.all.map` in controllers are smells *and* perf risks.
+
 ## Severity calibration
 
 | Pattern | Default tier |

@@ -136,6 +136,15 @@ A ratio < 0.5 in a Rails app is a yellow flag (thin tests). Per-layer ratios are
 | Spec/app LOC ratio <0.5 globally | Medium |
 | `:focus`/`fit` left in tree | High (unmerged broken commit smell) |
 
+## Cross-cuts
+
+When tagging findings in this dimension, also consider these as `secondary_dimensions[]`:
+
+- **`developer-experience`** — slow CI / unstable specs are also DX problems (CI runtime >15min, flaky retries).
+- **`risk-hotspots`** — a large untested file is *both* a hotspot and a coverage gap; tag both.
+- **`money-and-payments`** — coverage gaps inside `app/services/payments/*` are money-criticality; tag both.
+- **`security-and-authz`** — auth-form spec gaps are security risks; tag both.
+
 ## False positives to avoid
 
 - A controller without a request spec is fine if it has thorough service-layer coverage of the same logic. Check the layer below before flagging.
