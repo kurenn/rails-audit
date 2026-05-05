@@ -363,12 +363,31 @@ Apply `output-template.md` to the JSON from Step 4 (now possibly mutated by Step
 
 ### Step 7 (was 6). Write outputs
 
-Save **both** files to `tmp/rails-audit/`:
+Save the structured JSON + rendered markdown to `tmp/rails-audit/`. Filename pattern: `report-YYYY-MM-DD`. Use today's actual date.
 
-- `report-YYYY-MM-DD.json` — the structured source of truth (use today's actual date)
-- `report-YYYY-MM-DD.md`   — the rendered view
+**Single-file mode** (default — when rendered markdown is < 30 KB):
 
-If a prior `report-*.json` exists in the same directory, populate `trend{}` in the new JSON before rendering (see PR#10 — finding-level diff by fingerprint).
+- `report-YYYY-MM-DD.json` — structured source of truth
+- `report-YYYY-MM-DD.md` — rendered view
+
+**Multi-file mode** (added v0.4 — when rendered markdown is ≥ 30 KB):
+
+- `report-YYYY-MM-DD.json` — structured source of truth (unchanged shape, single file)
+- `report-YYYY-MM-DD.md` — top-level index with anchor links to the three sub-files
+- `report-YYYY-MM-DD-summary.md` — executive summary, scorecards, fix sequence (the part stakeholders read)
+- `report-YYYY-MM-DD-findings.md` — full punch list with all findings (the part engineers read)
+- `report-YYYY-MM-DD-appendix.md` — tooling, coverage map, hotspots, ignored, cost (the audit-trail part)
+
+Force one mode with `--single-file` or `--multi-file`. Without a flag, the renderer measures the assembled markdown and chooses based on the 30 KB threshold.
+
+The top-level `report-YYYY-MM-DD.md` in multi-file mode includes:
+- The header (date / commit / mode / stack)
+- A table of contents with anchor links to the three sub-files
+- Executive summary inline (so stakeholders don't need to click)
+
+Sub-files inherit the same header so each is self-contained when read alone.
+
+If a prior `report-*.json` exists in the same directory, populate `trend{}` in the new JSON before rendering.
 
 ### Step 8 (was 7). Brief the user
 
