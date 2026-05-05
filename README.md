@@ -66,13 +66,6 @@ claude plugin install rails-audit@kurenn           # one-time install
 
 After install, restart your Claude Code session and `/rails-audit` appears in the slash menu.
 
-Pull updates with:
-
-```bash
-claude plugin marketplace update kurenn
-claude plugin update rails-audit
-```
-
 ### Local plugin dir (development)
 
 ```bash
@@ -90,6 +83,33 @@ git clone https://github.com/kurenn/rails-audit.git ~/.claude/skills/rails-audit
 ```
 
 > As of 0.3.0 the skill content lives under `skills/rails-audit/` (plugin layout). Older clones expecting it at the repo root won't find SKILL.md anymore.
+
+## Updating
+
+When a new version is released, pull it via the marketplace:
+
+```bash
+# Refresh the marketplace cache (picks up new versions from marketplace.json)
+claude plugin marketplace update kurenn
+
+# Update rails-audit to the latest released version
+claude plugin update rails-audit
+```
+
+Restart your Claude Code session after updating so the slash menu picks up the new version.
+
+Verify which version you're on:
+
+```bash
+claude plugin list | grep -A3 rails-audit@kurenn
+```
+
+To pin to an older version (e.g. for rollback while debugging a regression), clone the tag locally and load via `--plugin-dir`:
+
+```bash
+git clone https://github.com/kurenn/rails-audit --branch v0.3.0 ~/workspace/rails-audit-0.3.0
+claude --plugin-dir ~/workspace/rails-audit-0.3.0
+```
 
 ## Usage
 
