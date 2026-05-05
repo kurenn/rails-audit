@@ -4,6 +4,13 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#10 — Link-rot CI for reference points)
+
+- New GitHub Actions workflow `.github/workflows/check-references.yml`. Runs weekly (Mondays 09:00 UTC) and on manual dispatch. Extracts URLs from the `## Reference points` sections of `skills/rails-audit/dimensions/*.md`, HEAD-checks each, and opens (or updates) a tracking issue tagged `link-rot` listing the rotted URLs.
+- Workflow is read-only on the repo content; only writes to issues. Uses `secrets.GITHUB_TOKEN` (no PAT needed).
+- New `link-rot` label created on the repo for tagging the auto-generated issue.
+- Closes #35.
+
 ### Added (v0.3 milestone PR#9 — Multi-file output for large reports)
 
 - **Single-file mode** (default, < 30 KB) — unchanged: `report-YYYY-MM-DD.{json,md}`.
