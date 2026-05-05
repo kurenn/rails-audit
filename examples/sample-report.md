@@ -260,8 +260,9 @@ No ledger of who changed is_blocked, subscribed_at, stripe_customer_id, or non_a
 | M1 | Time-sensitive specs use Time.current without freeze | `spec/requests/api/user_controller_spec.rb` | Spec Stability |
 | M2 | update_columns(attrs) mass-update on User | `app/models/user.rb:118` | Code Smells · Data Integrity |
 | M3 | validates_uniqueness count > unique indexes in schema | `db/schema.rb` | Data Integrity |
-| M4 | No bullet gem — N+1 detection blind | `Gemfile` | Performance |
-| M5 | CI builds development Docker target instead of testing | `docker-compose.yml` | Developer Experience |
+| M4 | CI builds development Docker target instead of testing | `docker-compose.yml` | Developer Experience |
+
+> 1 finding suppressed by `.audit-ignore.yml`: see Appendix D.
 
 ### Low
 
@@ -302,12 +303,11 @@ No ledger of who changed is_blocked, subscribed_at, stripe_customer_id, or non_a
 - [ ] B8: Ruby and Rails are both EOL (`.ruby-version`)
 - [ ] H11: No error tracker / APM in production (`Gemfile`)
 - [ ] H12: No audit log on money/auth models (`Gemfile`)
-- [ ] M4: No bullet gem — N+1 detection blind (`Gemfile`)
 
 ### Phase 5 — Smell cleanup (2w)
 - [ ] M2: update_columns(attrs) mass-update on User (`app/models/user.rb`)
 - [ ] M3: validates_uniqueness count > unique indexes in schema (`db/schema.rb`)
-- [ ] M5: CI builds development Docker target instead of testing (`docker-compose.yml`)
+- [ ] M4: CI builds development Docker target instead of testing (`docker-compose.yml`)
 
 **Rationale:**
 - _Phase 1_: Team needs safe rollback before any other change.
@@ -363,6 +363,14 @@ No ledger of who changed is_blocked, subscribed_at, stripe_customer_id, or non_a
 | `app/jobs/evidence_ingest_job.rb` | 131 | job | no |
 | `app/services/payments/commission.rb` | 122 | service | no |
 | `app/services/storage/signs_service.rb` | 119 | service | no |
+
+## Appendix D — Ignored findings
+
+| ID | Reason | Acknowledged by | Expires |
+|---|---|---|---|
+| `f-c1b2c3d4e5f60002` | Bullet gem will be added in the Q3 N+1 audit sprint (LIN-1234). Current performance is acceptable per Datadog dashboards. | abkuri88@gmail.com | 2026-09-30 |
+
+> **Stale-ignore warning** (1): `f-deadbeefdeadbeef` does not match any current finding. Remove from `.audit-ignore.yml`.
 
 ## Appendix E — Cost recap
 

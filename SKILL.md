@@ -103,6 +103,29 @@ Read the four agent outputs and produce **a JSON object conforming to `schema/re
 
 The output of this step is **a single JSON object**. Validate it against `schema/report.schema.json` before proceeding.
 
+### Step 4.4. Apply `.audit-ignore.yml`
+
+Read `.audit-ignore.yml` from the repo root if present. Each entry is a fingerprint-keyed acknowledgement (see `examples/.audit-ignore.yml.example`). Required fields per entry: `id` (matches `findings[].id`) and `reason` (non-empty). Optional: `acknowledged_by`, `expires_at`.
+
+For each entry:
+
+1. **If `expires_at` is present and < today** — the ignore is expired. The matching finding stays in the punch list with a `_(ignore expired YYYY-MM-DD)_` note appended to its explanation. Do **not** add to `ignored_findings[]`.
+2. **If the entry's `id` matches no current finding** — push a string to `audit.ignore_warnings[]` describing the stale ignore (so it can be cleaned up). Skip.
+3. **Otherwise** — set `findings[<id>].ignored = true` and add an entry to top-level `ignored_findings[]` with `id`, `reason`, `acknowledged_by`, `expires_at`, `expired: false`.
+
+Findings with `ignored: true` are excluded from:
+- The punch list rendered in markdown (they go to Appendix D instead)
+- Step 4.5 money-path re-validation (no point re-checking suppressed findings)
+- Step 5.5 self-check calibration percentages (suppressed findings don't inflate the high/blocker pcts)
+
+But they **are** included in:
+- Trend tracking (Step 7) — an ignored finding still counts as "persisted" if it was in the prior report
+- The fingerprint corpus for future runs (so the ignore can match stably)
+
+If the user wants to **add** a new ignore entry interactively during an audit, use prompt **P6** in `prompts.md` (free-form reason; default 90-day expiry).
+
+The schema and template already support `ignored_findings[]` and `audit.ignore_warnings[]` from PR#1. No schema or template change needed.
+
 ### Step 4.5. Money-path re-validation
 
 Before self-check, run a focused second pass on every finding tagged `money-and-payments` in `primary_dimension` OR `secondary_dimensions[]`. See `dimensions/money-revalidation.md` for the full checklist.
