@@ -148,7 +148,7 @@ def handle_event(event)
   when 'payment_intent.succeeded'
 ```
 Signature is verified via Stripe::Webhook.construct_event, but no Event.find_or_create_by(stripe_event_id: event.id) guard. Any new event type added without the inscription_charge? defensive check will double-fire.
-**Fix:** processed_stripe_events table with unique index on stripe_event_id; insert-or-skip at top of handle_event. _(≈1d)_
+**Fix:** processed_stripe_events table with unique index on stripe_event_id; insert-or-skip at top of handle_event. _(≈1d)_ · _Re-validated: confirmed_
 
 #### H2. ApplicationJob retry/discard policies commented out — Background Jobs · Money & Payments · Reliability
 **Location:** `app/jobs/application_job.rb:1-9`
@@ -177,8 +177,8 @@ Faraday default is no timeout. A Stripe/Twilio/GCS slow response hangs the reque
 ```
 @user.update_column(:stripe_customer_id, customer.id)
 ```
-A payment-relevant column being written without validations or callbacks. If an audit gem (paper_trail/audited) is added later, this silently skips it.
-**Fix:** @user.update!(stripe_customer_id: customer.id) _(≈5m)_
+A payment-relevant column being written without validations or callbacks. If an audit gem (paper_trail/audited) is added later, this silently skips it. Re-validation also notes this column should carry an audit trail per M-RV-6 (audit-column completeness on money tables).
+**Fix:** @user.update!(stripe_customer_id: customer.id); track customer-ID changes via paper_trail or an explicit StripeCustomerLink record. _(≈1h)_ · _Re-validated: refined_
 
 #### H5. update_column(:is_blocked) on security-relevant column — Code Smells · Security & AuthN · Data Integrity
 **Location:** `app/models/influencer.rb:43`
@@ -204,8 +204,8 @@ Login, password reset, signup, and unauthenticated background_jobs/* mass-mutati
 ```
 Stripe::Transfer.create(...) / Stripe::Payout.create(...) without idempotency_key:
 ```
-A retried payout job creates duplicate Stripe Transfers/Payouts.
-**Fix:** Pass idempotency_key: "payout-#{payout.id}" (stable internal ID) on every Stripe::*.create mutation. _(≈1d)_
+A retried payout job creates duplicate Stripe Transfers/Payouts. Re-validation re-read app/services/payments/payout.rb:11-62 and confirmed no idempotency_key: argument on the create calls.
+**Fix:** Pass idempotency_key: "payout-#{payout.id}" (stable internal ID) on every Stripe::*.create mutation. Do NOT use SecureRandom or Time.now for the key. _(≈1d)_ · _Re-validated: promoted_
 
 #### H8. Identity from unverified x-user-id header — Authorization · Security & AuthN
 **Location:** `app/controllers/api/authenticated_controller.rb:55-64`
