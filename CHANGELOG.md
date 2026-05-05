@@ -4,6 +4,22 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.2 PR#1 — Schema + JSON-first synthesis)
+
+- **`schema/report.schema.json`** — JSON Schema (draft 2020-12) defining the report contract. Mandatory fields: `schema_version` (=2), `skill_version`, `audit{}`, `summary{}`, `scorecards[]`, `findings[]`, `tooling{}`. Optional: `ignored_findings[]`, `trend{}`, `self_check{}`, `cost{}`, `fix_sequence[]`, `appendices{}`.
+- **`examples/sample-report.json`** — the influapp dogfood report rendered into the new schema (25 findings, 18 scorecards, 5 phases). Validates against the schema.
+- Stable finding fingerprints: `f-` + first 16 hex of `SHA256(primary_dimension + file_path + finding_type + normalize(evidence_snippet))`. `normalize` strips comments, collapses whitespace, preserves case.
+
+### Changed
+
+- **`SKILL.md`** — Step 4 (synthesize) now produces JSON conforming to `schema/report.schema.json`. New Step 5 renders markdown from the JSON via `output-template.md`. New Step 6 writes both `.json` and `.md` to `tmp/rails-audit/`.
+- **`output-template.md`** — refactored from free-form prose into a JSON-driven render template. Placeholder names (`{{json.path}}`) refer to JSON paths. Filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`) are deterministic.
+- **`examples/sample-report.md`** — regenerated as the rendered output of `sample-report.json`. Notes at the top: edits should land in the JSON or the template, not directly in this file.
+
+### Migration
+
+- Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
+
 ## [0.1.0] — 2026-05-04
 
 Initial release.

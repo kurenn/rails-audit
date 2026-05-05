@@ -99,22 +99,35 @@ Audit AuthN/AuthZ, OWASP-top patterns, payment/idempotency, PII handling.
 
 For each agent, write a self-contained brief: what to investigate, where to look, what to return. Don't say "based on the dimension file"; quote the specific checks the agent should run.
 
-### Step 4. Synthesize
+### Step 4. Synthesize → JSON
 
-Read the four agent outputs. Then:
+Read the four agent outputs and produce **a JSON object conforming to `schema/report.schema.json`**. JSON is the source of truth; the markdown report is rendered from it (Step 5). This step is the one that must get the contract right.
 
-1. **Verify loud claims**. Before writing "force_ssl is disabled" or "token comparison is timing-vulnerable" as fact in the report, read the cited line yourself. Agents hallucinate line numbers.
-2. **Deduplicate**. Same finding (e.g., `update_column` bypassing validations) often surfaces in multiple clusters — merge into one entry.
-3. **Apply rubric**. Severity from `rubric.md`. Do not inflate to "high" to seem useful. Money/auth defects default to blocker unless verified non-exploitable.
-4. **Sequence fixes**. Order them so each phase unblocks the next (e.g., add `/healthz` and rollback path *before* tackling spec coverage, because the team needs to be able to ship safely while specs are being written).
+1. **Verify loud claims**. Before writing "force_ssl is disabled" or "token comparison is timing-vulnerable" into a finding, read the cited line yourself with `sed -n '<line>p' <file>`. Agents hallucinate line numbers. Findings whose cite couldn't be verified get `self_check.status: "unverified"` and surface in the self-check section (see PR#5).
+2. **Deduplicate**. Same finding often surfaces in multiple clusters. Merge into one `findings[]` entry; tag overlapping dimensions in `secondary_dimensions[]` (see PR#2).
+3. **Compute fingerprints**. For each finding, `id = "f-" + first 16 hex chars of SHA256(primary_dimension + file_path + finding_type + normalize(evidence_snippet))`. The `normalize` function: strip leading/trailing whitespace, remove inline + block comments, collapse internal whitespace runs to single space, preserve case. Store the normalized snippet in `evidence.normalized` so the fingerprint is reproducible.
+4. **Apply rubric**. Severity from `rubric.md`. Don't inflate to "high" to seem useful. Money/auth defects default to blocker unless verified non-exploitable.
+5. **Assign each finding to a phase** (`phase: 1..5`) — phase numbers come from your fix-sequence ordering. Phases are deduped + ordered so each unblocks the next.
+6. **Populate `summary`, `scorecards`, `tooling`, `fix_sequence`** as the schema requires.
 
-### Step 5. Write report
+The output of this step is **a single JSON object**. Validate it against `schema/report.schema.json` before proceeding.
 
-Use `output-template.md`. Save as `tmp/rails-audit/report-YYYY-MM-DD.md` (use today's actual date). If a previous report exists, include a trend table (per-dimension score deltas).
+### Step 5. Render markdown
 
-### Step 6. Brief the user
+Apply `output-template.md` to the JSON from Step 4. The template is authoritative — placeholder names refer to JSON paths. Filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`) are deterministic; same JSON in produces same markdown out.
 
-≤200 words back to the user: top 3 blockers, recommended next action, link to the report file.
+### Step 6. Write outputs
+
+Save **both** files to `tmp/rails-audit/`:
+
+- `report-YYYY-MM-DD.json` — the structured source of truth (use today's actual date)
+- `report-YYYY-MM-DD.md`   — the rendered view
+
+If a prior `report-*.json` exists in the same directory, populate `trend{}` in the new JSON before rendering (see PR#10 — finding-level diff by fingerprint).
+
+### Step 7. Brief the user
+
+≤200 words back to the user: top 3 blockers, recommended next action, links to both the `.json` and `.md` files.
 
 ## Critical rules
 
@@ -150,8 +163,10 @@ ignore_paths:                    # excluded from smell/coverage checks
 
 - `rubric.md` — severity definitions and calibration examples
 - `tooling.md` — tool contract, detection, and invocation patterns
-- `output-template.md` — report markdown skeleton
+- `schema/report.schema.json` — **JSON Schema (draft 2020-12) for the report** — the contract; everything else is a view
+- `output-template.md` — markdown render template applied to the JSON
 - `dimensions/` — per-dimension check lists, one file per cluster
-- `examples/sample-report.md` — example output
+- `examples/sample-report.json` — example structured output
+- `examples/sample-report.md` — example rendered output (derived from `sample-report.json`)
 
 When working on a specific dimension, read the corresponding `dimensions/*.md` file. Don't try to keep all 18 dimensions in head at once.

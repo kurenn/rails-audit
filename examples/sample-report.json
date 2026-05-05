@@ -1,0 +1,652 @@
+{
+  "schema_version": 2,
+  "skill_version": "0.2.0-alpha.1",
+
+  "audit": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "started_at": "2026-05-04T20:30:00Z",
+    "finished_at": "2026-05-04T20:48:00Z",
+    "mode": "standard",
+    "scope": ["all"],
+    "commit": "fc8354b",
+    "branch": "main",
+    "project_name": "influapp-api",
+    "stack": {
+      "ruby": "3.1.2",
+      "rails": "7.0.4",
+      "deploy_target": "cloud_run",
+      "job_adapter": "cloudtasker",
+      "auth_strategy": "custom_jwt_identity_platform",
+      "test_framework": "rspec"
+    }
+  },
+
+  "summary": {
+    "risk_score": 4,
+    "verdict": "Domain shape and spec foundations are solid (random order, WebMock, transactional fixtures, mocked Identity Platform). What sits below the line is the production hardening: Rails+Ruby are both off support, force_ssl/require_master_key are disabled, there's no health endpoint, the API token compare is timing-vulnerable, and money-moving paths lack idempotency keys. Most of these are 1–3 line fixes — sequenced so each phase unblocks the next.",
+    "top_blocker_ids": [
+      "f-a1b2c3d4e5f60001",
+      "f-a1b2c3d4e5f60002",
+      "f-a1b2c3d4e5f60005"
+    ],
+    "next_action": "Land Phase 1 (deploy safety) within 1–2 days before any further feature work."
+  },
+
+  "scorecards": [
+    { "dimension": "foundation",           "score": 3, "would_be_10": "Bump Ruby to 3.3+ and Rails to 7.1/7.2 (both currently EOL)" },
+    { "dimension": "domain-shape",         "score": 7, "would_be_10": "Version /api/; move background_jobs/* off the unauthenticated tier" },
+    { "dimension": "spec-stability",       "score": 6, "would_be_10": "Freeze time-sensitive specs; switch CI image from development to testing target" },
+    { "dimension": "deploy-and-ci",        "score": 3, "would_be_10": "force_ssl, /healthz, require_master_key, externalize callback secret, documented rollback" },
+    { "dimension": "security-and-authz",   "score": 4, "would_be_10": "secure_compare for token; rack-attack on auth endpoints; verify Firebase JWT signature" },
+    { "dimension": "authorization",        "score": 5, "would_be_10": "Adopt Pundit/CanCan; add policy specs across Brand/Influencer split" },
+    { "dimension": "money-and-payments",   "score": 3, "would_be_10": "Stripe idempotency keys; webhook event-ID dedup; replace update_column(:stripe_customer_id)" },
+    { "dimension": "risk-hotspots",        "score": 5, "would_be_10": "Refactor Campaign (211 LOC) and User (137 LOC) toward extracted services" },
+    { "dimension": "code-smells",          "score": 5, "would_be_10": "Eliminate update_column on security/money columns; consistent service interface" },
+    { "dimension": "test-coverage",        "score": 4, "would_be_10": "Backfill app/services/payments/* and 15 of 16 form objects" },
+    { "dimension": "performance",          "score": 6, "would_be_10": "Add bullet; add timeouts on every external call (currently 0 grep hits)" },
+    { "dimension": "reliability",          "score": 3, "would_be_10": "Enable retry_on/discard_on on ApplicationJob; idempotency on payouts; HTTP timeouts" },
+    { "dimension": "observability",        "score": 4, "would_be_10": "Add error tracker (Sentry/Honeybadger); APM; PII out of custom log lines" },
+    { "dimension": "background-jobs",      "score": 4, "would_be_10": "Retry policy on ApplicationJob; specs for evidence_ingest_job (131 LOC, untested)" },
+    { "dimension": "data-integrity",       "score": 6, "would_be_10": "DB-level FK on remaining belongs_to; reconcile validates_uniqueness vs unique indexes" },
+    { "dimension": "data-governance",      "score": 4, "would_be_10": "AR encryption on PII columns; audit log on money/auth models; hard-delete path for users" },
+    { "dimension": "developer-experience", "score": 6, "would_be_10": "CI runs single-job ~14min in development Docker target (should use testing target)" },
+    { "dimension": "cost-and-scaling",     "score": 6, "would_be_10": "Cloud Run max-instances cap; cleanup job for ActiveStorage variants" }
+  ],
+
+  "findings": [
+    {
+      "id": "f-a1b2c3d4e5f60001",
+      "severity": "blocker",
+      "primary_dimension": "foundation",
+      "secondary_dimensions": ["security-and-authz"],
+      "title": "Ruby and Rails are both EOL",
+      "location": { "file": ".ruby-version", "line": 1, "line_range": [1, 1] },
+      "evidence": {
+        "snippet": "ruby-3.1.2",
+        "normalized": "ruby-3.1.2"
+      },
+      "explanation": "Brakeman flags both Ruby 3.1.2 (EOL 2025-03-31) and Rails 7.0.4 (EOL 2025-04-01). Neither receives security backports. Any Ruby/Rails CVE published after April 2025 is unpatched.",
+      "fix_sketch": "Plan upgrade to Ruby 3.3+ and Rails 7.1 or 7.2 LTS.",
+      "time_estimate": "1w",
+      "tool_origin": "brakeman",
+      "tool_warning_id": "unmaintained_dependency_ruby",
+      "phase": 4,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60002",
+      "severity": "blocker",
+      "primary_dimension": "deploy-and-ci",
+      "secondary_dimensions": ["security-and-authz"],
+      "title": "force_ssl disabled in production",
+      "location": { "file": "config/environments/production.rb", "line": 51, "line_range": [51, 51] },
+      "evidence": {
+        "snippet": "# config.force_ssl = true",
+        "normalized": "config.force_ssl = true"
+      },
+      "explanation": "App accepts plain HTTP if any path bypasses Cloud Run's TLS terminator. JWT/auth headers and Stripe customer IDs travel unencrypted in those cases.",
+      "fix_sketch": "Uncomment. Cloud Run honors X-Forwarded-Proto by default.",
+      "time_estimate": "5m",
+      "tool_origin": "manual",
+      "phase": 1,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60003",
+      "severity": "blocker",
+      "primary_dimension": "deploy-and-ci",
+      "title": "require_master_key disabled",
+      "location": { "file": "config/environments/production.rb", "line": 23, "line_range": [23, 23] },
+      "evidence": {
+        "snippet": "# config.require_master_key = true",
+        "normalized": "config.require_master_key = true"
+      },
+      "explanation": "App boots without a master key and only fails when the first credential read happens — minutes after a deploy, by which point the bad revision may have served traffic.",
+      "fix_sketch": "Uncomment. Verify CI env injection has the key set.",
+      "time_estimate": "5m",
+      "tool_origin": "manual",
+      "phase": 1,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60004",
+      "severity": "blocker",
+      "primary_dimension": "deploy-and-ci",
+      "title": "No health endpoint",
+      "location": { "file": "config/routes.rb" },
+      "evidence": {
+        "snippet": "(no match for health|healthz|readyz|liveness)",
+        "normalized": "no_match"
+      },
+      "explanation": "Cloud Run can't probe readiness or gate rollouts; bad revisions receive traffic before they're ready.",
+      "fix_sketch": "get '/healthz' => 'health#show'; controller does ActiveRecord::Base.connection.execute('SELECT 1') and renders 200.",
+      "time_estimate": "1h",
+      "tool_origin": "grep",
+      "phase": 1,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60005",
+      "severity": "blocker",
+      "primary_dimension": "deploy-and-ci",
+      "secondary_dimensions": ["data-governance"],
+      "title": "Hardcoded callback secret in production deploy workflow",
+      "location": { "file": ".github/workflows/deploy-to-cloud-run.yml", "line": 233, "line_range": [233, 233] },
+      "evidence": {
+        "snippet": "COMPRESS_VIDEO_CALLBACK_SECRET=1234567890abcdef",
+        "normalized": "COMPRESS_VIDEO_CALLBACK_SECRET=1234567890abcdef"
+      },
+      "explanation": "Either this exact mock value is what production runs with (callbacks are unauthenticated in practice), or it's overridden later but the workflow shows no override path.",
+      "fix_sketch": "Move to GCP Secret Manager or GitHub repo secret; reference via ${{ secrets.COMPRESS_VIDEO_CALLBACK_SECRET }}.",
+      "time_estimate": "1h",
+      "tool_origin": "grep",
+      "phase": 1,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60006",
+      "severity": "blocker",
+      "primary_dimension": "security-and-authz",
+      "title": "API token compared with ==",
+      "location": { "file": "app/controllers/api/authenticated_controller.rb", "line": 33, "line_range": [33, 33] },
+      "evidence": {
+        "snippet": "raise StandardError, 'Unauthorized Request' unless application_token == extracted_token",
+        "normalized": "raise StandardError, 'Unauthorized Request' unless application_token == extracted_token"
+      },
+      "explanation": "Timing-vulnerable on every authenticated request. Same pattern in unauthenticated_controller.rb:25.",
+      "fix_sketch": "ActiveSupport::SecurityUtils.secure_compare(application_token, extracted_token.to_s) with length-equality guard.",
+      "time_estimate": "5m",
+      "tool_origin": "manual",
+      "phase": 2,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60007",
+      "severity": "blocker",
+      "primary_dimension": "security-and-authz",
+      "title": "URI gem CVEs",
+      "location": { "file": "Gemfile.lock" },
+      "evidence": {
+        "snippet": "uri (0.13.0)",
+        "normalized": "uri 0.13.0"
+      },
+      "explanation": "bundle-audit reports CVE-2025-27221 (Medium, userinfo leakage in URI#join/merge/+) and CVE-2025-61594 (Unknown, credential-leakage bypass over CVE-2025-27221).",
+      "fix_sketch": "bundle update uri (target >= 1.0.4 or ~> 0.13.3).",
+      "time_estimate": "5m",
+      "tool_origin": "bundle-audit",
+      "phase": 1,
+      "ignored": false,
+      "self_check": { "status": "verified", "notes": null }
+    },
+    {
+      "id": "f-a1b2c3d4e5f60008",
+      "severity": "blocker",
+      "primary_dimension": "deploy-and-ci",
+      "secondary_dimensions": ["data-governance"],
+      "title": "Production deploy points at staging bucket and DB",
+      "location": { "file": ".github/workflows/ci-and-cd-production.yml" },
+      "evidence": {
+        "snippet": "# until stripe tests are done",
+        "normalized": "until stripe tests are done"
+      },
+      "explanation": "Production data persists into staging storage; any staging teardown is a prod data event.",
+      "fix_sketch": "Restore prod env vars; complete Stripe tests on a gated branch.",
+      "time_estimate": "1h",
+      "tool_origin": "agent",
+      "phase": 1,
+      "ignored": false,
+      "self_check": { "status": "unverified", "notes": "Comment found in workflows; needs file-line confirmation before fix." }
+    },
+
+    {
+      "id": "f-b1b2c3d4e5f60001",
+      "severity": "high",
+      "primary_dimension": "money-and-payments",
+      "secondary_dimensions": ["security-and-authz"],
+      "title": "Stripe webhook lacks event-ID dedup",
+      "location": { "file": "app/controllers/webhooks/stripe_controller.rb", "line": 11, "line_range": [11, 46] },
+      "evidence": {
+        "snippet": "def handle_event(event)\n  case event.type\n  when 'payment_intent.succeeded'",
+        "normalized": "def handle_event(event) case event.type when 'payment_intent.succeeded'"
+      },
+      "explanation": "Signature is verified via Stripe::Webhook.construct_event, but no Event.find_or_create_by(stripe_event_id: event.id) guard. Any new event type added without the inscription_charge? defensive check will double-fire.",
+      "fix_sketch": "processed_stripe_events table with unique index on stripe_event_id; insert-or-skip at top of handle_event.",
+      "time_estimate": "1d",
+      "tool_origin": "manual",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60002",
+      "severity": "high",
+      "primary_dimension": "background-jobs",
+      "secondary_dimensions": ["money-and-payments", "reliability"],
+      "title": "ApplicationJob retry/discard policies commented out",
+      "location": { "file": "app/jobs/application_job.rb", "line": 1, "line_range": [1, 9] },
+      "evidence": {
+        "snippet": "class ApplicationJob < ActiveJob::Base\n  # retry_on ActiveRecord::Deadlocked\n  # discard_on ActiveJob::DeserializationError\nend",
+        "normalized": "class ApplicationJob < ActiveJob::Base end"
+      },
+      "explanation": "Every job inherits zero retry safety. Payment jobs (PayInfluencer.perform!) silently lose work on transient Stripe errors.",
+      "fix_sketch": "Enable both. Add retry_on Net::OpenTimeout, attempts: 5, wait: :exponentially_longer.",
+      "time_estimate": "1h",
+      "tool_origin": "manual",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60003",
+      "severity": "high",
+      "primary_dimension": "reliability",
+      "title": "Zero timeouts on external HTTP calls",
+      "location": { "file": "app/services/" },
+      "evidence": {
+        "snippet": "(grep open_timeout|read_timeout|timeout: returns 0 hits in app/services/ and app/jobs/)",
+        "normalized": "no_timeout_grep_match"
+      },
+      "explanation": "Faraday default is no timeout. A Stripe/Twilio/GCS slow response hangs the request thread until Puma kills the worker.",
+      "fix_sketch": "Configure default Faraday connection with open_timeout: 5, read_timeout: 30. Stripe SDK: Stripe.api_request_timeout = 30; Stripe.max_network_retries = 2.",
+      "time_estimate": "1d",
+      "tool_origin": "grep",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60004",
+      "severity": "high",
+      "primary_dimension": "money-and-payments",
+      "secondary_dimensions": ["code-smells", "data-integrity"],
+      "title": "update_column(:stripe_customer_id) bypasses callbacks/audit",
+      "location": { "file": "app/services/payments/stripe_service.rb", "line": 35, "line_range": [35, 35] },
+      "evidence": {
+        "snippet": "@user.update_column(:stripe_customer_id, customer.id)",
+        "normalized": "@user.update_column(:stripe_customer_id, customer.id)"
+      },
+      "explanation": "A payment-relevant column being written without validations or callbacks. If an audit gem (paper_trail/audited) is added later, this silently skips it.",
+      "fix_sketch": "@user.update!(stripe_customer_id: customer.id)",
+      "time_estimate": "5m",
+      "tool_origin": "grep",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60005",
+      "severity": "high",
+      "primary_dimension": "code-smells",
+      "secondary_dimensions": ["security-and-authz", "data-integrity"],
+      "title": "update_column(:is_blocked) on security-relevant column",
+      "location": { "file": "app/models/influencer.rb", "line": 43, "line_range": [43, 43] },
+      "evidence": {
+        "snippet": "update_column(:is_blocked, true)",
+        "normalized": "update_column(:is_blocked, true)"
+      },
+      "explanation": "Bypasses callbacks/validations. If an audit log or notification callback is added later, this silently skips it.",
+      "fix_sketch": "Use update! so future audit/notification callbacks fire. If you genuinely need to skip callbacks, name the helper explicitly.",
+      "time_estimate": "5m",
+      "tool_origin": "grep",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60006",
+      "severity": "high",
+      "primary_dimension": "observability",
+      "title": "No error tracker / APM in production",
+      "location": { "file": "Gemfile" },
+      "evidence": {
+        "snippet": "(no sentry-*, honeybadger, bugsnag, rollbar, ddtrace, newrelic_rpm, skylight, appsignal, opentelemetry-*)",
+        "normalized": "no_error_tracker_in_gemfile"
+      },
+      "explanation": "Errors only surface via Cloud Run logs. No transaction tracing on payment paths.",
+      "fix_sketch": "Add sentry-ruby + sentry-rails with before_send PII scrubbing as a minimum.",
+      "time_estimate": "1d",
+      "tool_origin": "grep",
+      "phase": 4,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60007",
+      "severity": "high",
+      "primary_dimension": "security-and-authz",
+      "title": "No rate limiting",
+      "location": { "file": "Gemfile" },
+      "evidence": {
+        "snippet": "(no rack-attack)",
+        "normalized": "no_rack_attack_in_gemfile"
+      },
+      "explanation": "Login, password reset, signup, and unauthenticated background_jobs/* mass-mutation routes are unbounded.",
+      "fix_sketch": "Add rack-attack with throttles on auth/*, registration/*, and background_jobs/*.",
+      "time_estimate": "1d",
+      "tool_origin": "grep",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60008",
+      "severity": "high",
+      "primary_dimension": "data-governance",
+      "secondary_dimensions": ["money-and-payments"],
+      "title": "No audit log on money/auth models",
+      "location": { "file": "Gemfile" },
+      "evidence": {
+        "snippet": "(no audited, paper_trail, or logidze)",
+        "normalized": "no_audit_log_gem"
+      },
+      "explanation": "No ledger of who changed is_blocked, subscribed_at, stripe_customer_id, or non_attended_count.",
+      "fix_sketch": "Add paper_trail on User, Influencer, Brand, Payout, Transaction.",
+      "time_estimate": "1d",
+      "tool_origin": "grep",
+      "phase": 4,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f60009",
+      "severity": "high",
+      "primary_dimension": "money-and-payments",
+      "title": "Stripe payouts/transfers missing idempotency keys",
+      "location": { "file": "app/services/payments/payout.rb", "line_range": [11, 62] },
+      "evidence": {
+        "snippet": "Stripe::Transfer.create(...) / Stripe::Payout.create(...) without idempotency_key:",
+        "normalized": "stripe_create_without_idempotency_key"
+      },
+      "explanation": "A retried payout job creates duplicate Stripe Transfers/Payouts.",
+      "fix_sketch": "Pass idempotency_key: \"payout-#{payout.id}\" (stable internal ID) on every Stripe::*.create mutation.",
+      "time_estimate": "1d",
+      "tool_origin": "agent",
+      "phase": 2,
+      "ignored": false,
+      "self_check": { "status": "unverified", "notes": "Agent-reported; needs file re-read before fix." }
+    },
+    {
+      "id": "f-b1b2c3d4e5f6000a",
+      "severity": "high",
+      "primary_dimension": "authorization",
+      "secondary_dimensions": ["security-and-authz"],
+      "title": "Identity from unverified x-user-id header",
+      "location": { "file": "app/controllers/api/authenticated_controller.rb", "line_range": [55, 64] },
+      "evidence": {
+        "snippet": "def current_user\n  user = User.find_by(identity_platform_id: user_header)",
+        "normalized": "def current_user user = User.find_by(identity_platform_id: user_header)"
+      },
+      "explanation": "The header value is trusted as-is — no Firebase JWT signature check.",
+      "fix_sketch": "Verify the Firebase JWT against the JWKS; extract sub from the verified payload. Discard x-user-id.",
+      "time_estimate": "1d",
+      "tool_origin": "manual",
+      "phase": 2,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f6000b",
+      "severity": "high",
+      "primary_dimension": "test-coverage",
+      "secondary_dimensions": ["spec-stability"],
+      "title": "8 API controllers without request specs",
+      "location": { "file": "spec/requests/api/" },
+      "evidence": {
+        "snippet": "(missing for campaigns_controller, brand_controller, influencers_controller, background_jobs_controller, and 4 others)",
+        "normalized": "8_missing_request_specs"
+      },
+      "explanation": "Critical surface untested; one regression away from breakage.",
+      "fix_sketch": "One spec per controller — happy path + auth-failure + one validation case per action.",
+      "time_estimate": "1w",
+      "tool_origin": "manual",
+      "phase": 3,
+      "ignored": false
+    },
+    {
+      "id": "f-b1b2c3d4e5f6000c",
+      "severity": "high",
+      "primary_dimension": "security-and-authz",
+      "title": "Possible command injection in video versioner",
+      "location": { "file": "workers/compress_video/lib/media/versioner.rb", "line": 211, "line_range": [211, 211] },
+      "evidence": {
+        "snippet": "`#{[\"ffprobe\", \"-v\", \"quiet\", \"-print_format\", \"json\", \"-show_streams\", \"-show_format\", src_path].map { |c| c.include?(\" \") ? \"\\\"#{c}\\\"\" : c }.join(\" \")}`",
+        "normalized": "backtick_exec_with_src_path_join"
+      },
+      "explanation": "Backticks with a src_path whose origin chain ultimately includes user-uploaded filenames. The other two Open3.capture3 warnings on lines 142 and 159 are array-form (argv, no shell) — Brakeman false positives.",
+      "fix_sketch": "Replace backticks with Open3.capture3(\"ffprobe\", \"-v\", \"quiet\", \"-print_format\", \"json\", \"-show_streams\", \"-show_format\", src_path).",
+      "time_estimate": "1h",
+      "tool_origin": "brakeman",
+      "tool_warning_id": "command_injection_versioner_211",
+      "phase": 2,
+      "ignored": false
+    },
+
+    {
+      "id": "f-c1b2c3d4e5f60001",
+      "severity": "medium",
+      "primary_dimension": "code-smells",
+      "secondary_dimensions": ["data-integrity"],
+      "title": "update_columns(attrs) mass-update on User",
+      "location": { "file": "app/models/user.rb", "line": 118, "line_range": [118, 118] },
+      "evidence": { "snippet": "update_columns(attrs)", "normalized": "update_columns(attrs)" },
+      "explanation": "Generic mass-update bypassing validations and callbacks; risky surface for any caller that passes user-influenced attrs.",
+      "fix_sketch": "Replace with explicit update! calls.",
+      "time_estimate": "1h",
+      "tool_origin": "grep",
+      "phase": 5,
+      "ignored": false
+    },
+    {
+      "id": "f-c1b2c3d4e5f60002",
+      "severity": "medium",
+      "primary_dimension": "performance",
+      "title": "No bullet gem — N+1 detection blind",
+      "location": { "file": "Gemfile" },
+      "evidence": { "snippet": "(no bullet gem)", "normalized": "no_bullet_in_gemfile" },
+      "explanation": "Without bullet in dev/test, N+1 introductions go unnoticed until production slowdowns.",
+      "fix_sketch": "Add gem 'bullet' to :development, :test groups; configure Bullet.enable = true in dev.",
+      "time_estimate": "1h",
+      "tool_origin": "grep",
+      "phase": 4,
+      "ignored": false
+    },
+    {
+      "id": "f-c1b2c3d4e5f60003",
+      "severity": "medium",
+      "primary_dimension": "data-integrity",
+      "title": "validates_uniqueness count > unique indexes in schema",
+      "location": { "file": "db/schema.rb" },
+      "evidence": { "snippet": "(7 validates_uniqueness vs 6 unique-true indexes)", "normalized": "uniqueness_index_mismatch_7_vs_6" },
+      "explanation": "Concurrent inserts can both pass model validation, then both succeed in DB.",
+      "fix_sketch": "Audit each validates_uniqueness; add a corresponding DB-level unique index.",
+      "time_estimate": "1h",
+      "tool_origin": "grep",
+      "phase": 5,
+      "ignored": false
+    },
+    {
+      "id": "f-c1b2c3d4e5f60004",
+      "severity": "medium",
+      "primary_dimension": "spec-stability",
+      "title": "Time-sensitive specs use Time.current without freeze",
+      "location": { "file": "spec/requests/api/user_controller_spec.rb" },
+      "evidence": { "snippet": "Time.current usage without freeze_time/travel_to", "normalized": "time_unfrozen_in_specs" },
+      "explanation": "Will eventually flake at month/year boundaries.",
+      "fix_sketch": "Wrap timestamp-dependent specs with freeze_time or travel_to.",
+      "time_estimate": "1d",
+      "tool_origin": "grep",
+      "phase": 3,
+      "ignored": false
+    },
+    {
+      "id": "f-c1b2c3d4e5f60005",
+      "severity": "medium",
+      "primary_dimension": "developer-experience",
+      "title": "CI builds development Docker target instead of testing",
+      "location": { "file": "docker-compose.yml" },
+      "evidence": { "snippet": "tests service uses development build target", "normalized": "ci_uses_development_target" },
+      "explanation": "Bloats CI image with dev-only gems; slower feedback loop.",
+      "fix_sketch": "Switch the tests service to target: testing in docker-compose.yml.",
+      "time_estimate": "1h",
+      "tool_origin": "manual",
+      "phase": 5,
+      "ignored": false
+    }
+  ],
+
+  "tooling": {
+    "ran": [
+      { "name": "brakeman",     "tier": 1, "version": "7.0.x", "findings_count": 5 },
+      { "name": "bundle-audit", "tier": 1, "version": "0.9.2", "findings_count": 3 },
+      { "name": "reek",         "tier": 2, "version": "6.5.x", "findings_count": 0 },
+      { "name": "rails_best_practices", "tier": 2, "version": "1.23.4", "findings_count": 0 }
+    ],
+    "missing": [
+      { "name": "rubocop",     "tier": 1, "reason": "in Gemfile but bundle install failed locally on nio4r native compilation; CI image runs it cleanly" },
+      { "name": "simplecov",   "tier": 2, "reason": "in Gemfile; no coverage/.last_run.json present at audit time" },
+      { "name": "rubycritic",  "tier": 3, "reason": "added to Gemfile by Step 0; pending bundle install resolution" },
+      { "name": "flog",        "tier": 2, "reason": "added to Gemfile by Step 0; pending bundle install resolution" },
+      { "name": "flay",        "tier": 2, "reason": "added to Gemfile by Step 0; pending bundle install resolution" },
+      { "name": "bullet",      "tier": 2, "reason": "added to Gemfile by Step 0; pending bundle install resolution" }
+    ],
+    "skipped": [
+      { "name": "mutant", "tier": 3, "reason": "deep mode only" }
+    ]
+  },
+
+  "self_check": {
+    "calibration": {
+      "blocker_pct": 0.32,
+      "high_pct": 0.48,
+      "warnings": [
+        "Severity inflation: 48% of findings tagged 'high' (threshold: 40%)",
+        "Blocker over-use: 32% of findings tagged 'blocker' (threshold: 25%)",
+        "Note: in v0.2 these are warn-only. Consider whether some blockers should demote to high after the fact."
+      ]
+    },
+    "verified_blockers": [
+      "f-a1b2c3d4e5f60001",
+      "f-a1b2c3d4e5f60002",
+      "f-a1b2c3d4e5f60003",
+      "f-a1b2c3d4e5f60004",
+      "f-a1b2c3d4e5f60005",
+      "f-a1b2c3d4e5f60006",
+      "f-a1b2c3d4e5f60007"
+    ],
+    "unverified_blockers": [
+      "f-a1b2c3d4e5f60008"
+    ]
+  },
+
+  "cost": {
+    "estimated_input_tokens": 52000,
+    "estimated_output_tokens": 14000,
+    "actual_input_tokens": null,
+    "actual_output_tokens": null,
+    "budget_tokens": null
+  },
+
+  "fix_sequence": [
+    {
+      "phase": 1,
+      "name": "Make deploys safe",
+      "estimated_effort": "1-2d",
+      "rationale": "Team needs safe rollback before any other change.",
+      "finding_ids": [
+        "f-a1b2c3d4e5f60002",
+        "f-a1b2c3d4e5f60003",
+        "f-a1b2c3d4e5f60004",
+        "f-a1b2c3d4e5f60005",
+        "f-a1b2c3d4e5f60007",
+        "f-a1b2c3d4e5f60008"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Close auth & money holes",
+      "estimated_effort": "3-5d",
+      "rationale": "Closes immediate exploit/loss surface.",
+      "finding_ids": [
+        "f-a1b2c3d4e5f60006",
+        "f-b1b2c3d4e5f60001",
+        "f-b1b2c3d4e5f60002",
+        "f-b1b2c3d4e5f60003",
+        "f-b1b2c3d4e5f60004",
+        "f-b1b2c3d4e5f60005",
+        "f-b1b2c3d4e5f60007",
+        "f-b1b2c3d4e5f60009",
+        "f-b1b2c3d4e5f6000a",
+        "f-b1b2c3d4e5f6000c"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Backfill specs on critical paths",
+      "estimated_effort": "1-2w",
+      "rationale": "Lets future changes not regress.",
+      "finding_ids": [
+        "f-b1b2c3d4e5f6000b",
+        "f-c1b2c3d4e5f60004"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Foundation upgrade + observability",
+      "estimated_effort": "1-3w",
+      "rationale": "Strategic foundation upgrade that should not be rushed (Rails major can take a sprint).",
+      "finding_ids": [
+        "f-a1b2c3d4e5f60001",
+        "f-b1b2c3d4e5f60006",
+        "f-b1b2c3d4e5f60008",
+        "f-c1b2c3d4e5f60002"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Smell cleanup",
+      "estimated_effort": "2w",
+      "rationale": "Sustainable hygiene work that runs as background without blocking releases.",
+      "finding_ids": [
+        "f-c1b2c3d4e5f60001",
+        "f-c1b2c3d4e5f60003",
+        "f-c1b2c3d4e5f60005"
+      ]
+    }
+  ],
+
+  "appendices": {
+    "rubocop_offenses": {
+      "total": 142,
+      "by_severity": { "convention": 140, "warning": 2 },
+      "top_categories": ["Style/StringLiterals", "Layout/LineLength", "Style/Documentation"]
+    },
+    "todo_density": {
+      "total": 23,
+      "top_files": [
+        { "file": "app/models/user.rb", "count": 4 },
+        { "file": "app/services/payments/commission.rb", "count": 3 }
+      ]
+    },
+    "coverage_map": [
+      { "path": "app/services/payments/",        "files": 8,  "with_spec": 2,  "line_cov": null, "branch_cov": null, "risk_weight": "critical", "notes": "payout.rb (172 LOC), commission.rb (122 LOC) untested" },
+      { "path": "app/controllers/webhooks/",     "files": 2,  "with_spec": 1,  "line_cov": null, "branch_cov": null, "risk_weight": "critical", "notes": "stripe_controller has request spec; replay/dedup not exercised" },
+      { "path": "app/services/identity_platform/", "files": 5, "with_spec": 1, "line_cov": null, "branch_cov": null, "risk_weight": "critical", "notes": "base_api_request.rb (89 LOC) untested" },
+      { "path": "app/forms/",                    "files": 16, "with_spec": 1,  "line_cov": null, "branch_cov": null, "risk_weight": "critical", "notes": "only collaboration_request_form" },
+      { "path": "app/services/storage/",         "files": 3,  "with_spec": 0,  "line_cov": null, "branch_cov": null, "risk_weight": "high",     "notes": "multipart_upload_service.rb (142 LOC) untested" },
+      { "path": "app/jobs/",                     "files": 7,  "with_spec": 4,  "line_cov": null, "branch_cov": null, "risk_weight": "high",     "notes": "evidence_ingest_job (131 LOC), 2 others untested" },
+      { "path": "app/controllers/api/",          "files": 24, "with_spec": 16, "line_cov": null, "branch_cov": null, "risk_weight": "high",     "notes": "8 controllers missing request specs" },
+      { "path": "app/models/",                   "files": 42, "with_spec": 22, "line_cov": null, "branch_cov": null, "risk_weight": "medium",   "notes": "half coverage; concentrated in highest-traffic models" }
+    ],
+    "risk_hotspots": [
+      { "file": "app/models/campaign.rb",                                "loc": 211, "layer": "model",      "has_spec": "partial" },
+      { "file": "app/controllers/api/user_controller.rb",                "loc": 196, "layer": "controller", "has_spec": "yes" },
+      { "file": "app/controllers/api/payments/stripes_controller.rb",    "loc": 196, "layer": "controller", "has_spec": "yes" },
+      { "file": "app/services/payments/payout.rb",                       "loc": 172, "layer": "service",    "has_spec": "no" },
+      { "file": "app/models/evidence.rb",                                "loc": 170, "layer": "model",      "has_spec": "yes" },
+      { "file": "app/controllers/api/registrations_controller.rb",       "loc": 161, "layer": "controller", "has_spec": "yes" },
+      { "file": "app/controllers/callbacks/compress_video_controller.rb","loc": 156, "layer": "controller", "has_spec": "partial" },
+      { "file": "app/models/campaign_location.rb",                       "loc": 155, "layer": "model",      "has_spec": "yes" },
+      { "file": "app/services/storage/multipart_upload_service.rb",      "loc": 142, "layer": "service",    "has_spec": "no" },
+      { "file": "app/jobs/evidence_ingest_job.rb",                       "loc": 131, "layer": "job",        "has_spec": "no" },
+      { "file": "app/services/payments/commission.rb",                   "loc": 122, "layer": "service",    "has_spec": "no" },
+      { "file": "app/services/storage/signs_service.rb",                 "loc": 119, "layer": "service",    "has_spec": "no" }
+    ]
+  }
+}
