@@ -20,6 +20,15 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#8 — `--only` / `--exclude` scoped audits)
+
+- **`--only=<comma-list>`** — run only the named dimensions or aliases. Example: `/rails-audit --only=money,security`.
+- **`--exclude=<comma-list>`** — run everything except the named dimensions/aliases.
+- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>`: `/rails-audit money`.
+- **Aliases** (case-insensitive): `money` → `money-and-payments`, `security` → `security-and-authz`, `auth`/`authz` → `authorization`, `deploy`/`ci` → `deploy-and-ci`, `specs` → `spec-stability`, `coverage` → `test-coverage`, `perf` → `performance` + `reliability`, `code` → `code-smells` + `risk-hotspots`, `jobs` → `background-jobs`, `obs` → `observability`, `data` → `data-integrity` + `data-governance`, `dx` → `developer-experience`, `cost` → `cost-and-scaling`, `all` → all 18.
+- **Validation**: unknown dimension/alias rejected with a Levenshtein-suggested correction; `--only` and `--exclude` are mutually exclusive.
+- **Behavior**: scoped audits skip cluster fan-out for irrelevant clusters, filter scorecards and findings to in-scope dimensions (including findings whose `secondary_dimensions[]` overlap), renumber the scorecard table from 1, and gate Step 4.5 (money revalidation) on scope membership.
+
 ### Added (v0.2 PR#7 — `.audit-ignore.yml` suppression mechanism)
 
 - **`.audit-ignore.yml`** at repo root suppresses acknowledged findings by fingerprint. Each entry: `id` (required), `reason` (required, non-empty), `acknowledged_by` (optional), `expires_at` (optional ISO date).

@@ -15,6 +15,69 @@ Run a structured stability audit of a Ruby on Rails codebase and produce a singl
 
 If the user invokes `/rails-audit` with no mode, ask using prompt **P1** in `prompts.md` — then proceed.
 
+## Scope arguments
+
+By default an audit covers all 18 dimensions. Two args narrow the scope:
+
+- **`--only=<comma-list>`** — run only these dimensions (or aliases). Example: `/rails-audit --only=money,security`.
+- **`--exclude=<comma-list>`** — run all dimensions *except* these. Example: `/rails-audit --exclude=dx-and-cost,observability`.
+- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>`. Example: `/rails-audit money` ≡ `/rails-audit --only=money`.
+
+Mutually exclusive: `--only` and `--exclude` cannot be combined; reject with an error.
+
+### Aliases (case-insensitive)
+
+| Alias | Resolves to |
+|---|---|
+| `all` | every dimension |
+| `money` | `money-and-payments` |
+| `security` | `security-and-authz` |
+| `auth` | `authorization` |
+| `authz` | `authorization` |
+| `deploy` | `deploy-and-ci` |
+| `ci` | `deploy-and-ci` |
+| `specs` | `spec-stability` |
+| `coverage` | `test-coverage` |
+| `code-smells` | `code-smells` |
+| `code` | `code-smells` + `risk-hotspots` |
+| `perf` | `performance` + `reliability` |
+| `jobs` | `background-jobs` |
+| `obs` | `observability` |
+| `data` | `data-integrity` + `data-governance` |
+| `dx` | `developer-experience` |
+| `cost` | `cost-and-scaling` |
+
+Dimension names accepted directly (e.g. `money-and-payments`) as well.
+
+### Validation
+
+- Unknown dimension or alias → reject with `"Unknown dimension '<name>'. Did you mean '<closest-match>'?"` and exit. Use Levenshtein distance ≤2 for the suggestion.
+- `--only=` empty (no dimensions) → reject.
+- Both `--only` and `--exclude` set → reject.
+
+### Behavior
+
+When scope is narrower than `all`:
+
+1. **Step 3 fan-out** skips clusters whose dimensions are entirely outside the scope. Cluster ↔ dimension mapping:
+   - **A** Spec & Coverage: `spec-stability`, `test-coverage`
+   - **B** Deploy & CI: `foundation`, `deploy-and-ci`, `observability`
+   - **C** Code Health: `domain-shape`, `risk-hotspots`, `code-smells`, `performance`, `reliability`, `background-jobs`, `data-integrity`, `developer-experience`, `cost-and-scaling`
+   - **D** Security & Money: `security-and-authz`, `authorization`, `money-and-payments`, `data-governance`
+   A cluster that has at least one in-scope dimension still runs; agents are told to focus on the in-scope subset.
+
+2. **`audit.scope[]` in the report** lists the resolved dimension names (not aliases). For full audits: `["all"]`. For scoped: `["money-and-payments", "security-and-authz", ...]`.
+
+3. **Scorecards and findings** are filtered to in-scope dimensions only. Findings whose `primary_dimension` is in scope are included; those whose only in-scope tag is in `secondary_dimensions[]` are also included (tagging is the point of cross-cuts).
+
+4. **Renumbering**. The dimension index in the markdown scorecard table re-numbers from 1 (don't render `#3 #5 #7` — render `#1 #2 #3`).
+
+5. **Money-revalidation (Step 4.5)** runs only if `money-and-payments` is in scope.
+
+6. **Self-check (Step 5.5)** runs in scoped mode too — calibration percentages compute over the scoped finding set.
+
+7. **Trend (Step 7)** compares only the scoped slice of findings against the prior report's matching slice.
+
 ## Workflow
 
 ### Step 0. Provision tooling
@@ -70,7 +133,9 @@ Then run available tools in parallel Bash calls. Skip silently if not installed 
 
 ### Step 3. Fan out to subagents
 
-Launch **4 Explore agents IN PARALLEL** (single message, multiple Agent calls). Each gets:
+Launch up to **4 Explore agents IN PARALLEL** (single message, multiple Agent calls). When `audit.scope` is narrower than `all`, skip clusters whose dimensions are entirely outside the scope (see "Scope arguments" → cluster mapping). Clusters that have at least one in-scope dimension still run, but the agent brief instructs them to focus on the in-scope subset only.
+
+Each agent gets:
 - The relevant dimension file path(s) from `dimensions/`
 - The severity rubric path: `rubric.md`
 - The static-tool output paths from step 2
