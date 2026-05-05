@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.5 milestone PR#4 — bin/parse-reek + bin/parse-rails-best-practices)
+
+- **`bin/parse-reek`** — reads reek `-f json` output, aggregates by smell type and top affected files. Aggregate-only (per-smell findings would be noise). Emits the `appendices.code_smells` shape.
+- **`bin/parse-rails-best-practices`** — reads rails_best_practices `--format json` output, aggregates by check name and top files. Emits the `appendices.rails_best_practices` shape.
+- Schema additions (additive): `appendices.code_smells` and `appendices.rails_best_practices` with `total`, `top_*` arrays.
+- Both follow the parse-rubocop pattern: aggregate, never per-finding. The Tier-2 parser set is now complete (parse-rubocop, parse-reek, parse-rails-best-practices). Together with parse-brakeman + parse-bundle-audit, every Tier-1 and Tier-2 tool from `tooling.md` has a parser.
+- Closes #53, #54.
+
 ### Added (v0.5 milestone PR#3 — docs/lessons-learned.md)
 
 - New `docs/lessons-learned.md` capturing 8 build insights from the v0.3-v0.5 milestone work that should outlive any single CHANGELOG entry: the Ruby gsub/last_match gotcha, the C7 dimension-≤4 heuristic, the 25→30% blocker-pct paradox, why JSON-first matters, the bundle-audit-explosion-plus-inheritance pattern, the v0.3.0-as-plugin-restructure surprise, what was hardest to get right, and what I'd do differently next time.
