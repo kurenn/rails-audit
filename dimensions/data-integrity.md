@@ -140,6 +140,14 @@ For models with state, prefer an explicit state machine over a `status` string w
 - `belongs_to` with `with_deleted: true` is correct for soft-delete-aware joins, but means the parent might be a deleted record. Surface this.
 - `dependent: :destroy` on a soft-deleted parent silently soft-deletes children, which is usually fine, but `dependent: :delete_all` *hard* deletes — flag if mixed.
 
+## Cross-cuts
+
+- **`code-smells`** — `update_column`, `save(validate: false)`, hand-rolled state are smells *and* integrity risks.
+- **`money-and-payments`** — multi-step money writes without transactions are integrity primary; money secondary.
+- **`data-governance`** — soft-delete consistency on PII tables crosses with governance.
+- **`performance`** — missing indexes are perf primary; integrity secondary if FK constraints are also missing.
+- **`security-and-authz`** — `validates_uniqueness` without DB unique index is a race condition that can enable account takeover (e.g. duplicate emails).
+
 ## Severity calibration
 
 | Pattern | Default tier |

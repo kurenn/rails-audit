@@ -206,6 +206,17 @@ grep -rn "find_or_create_by\|first_or_create" app/ --include="*.rb"
 
 Each match needs a corresponding unique DB index — verify in `db/schema.rb`.
 
+## Cross-cuts
+
+When tagging findings here, also consider these as `secondary_dimensions[]`:
+
+- **`authorization`** — IDOR is *primary* AuthZ; tag here secondary if the controller is auth-relevant.
+- **`money-and-payments`** — webhook signature/replay protection is security primary; tag money secondary.
+- **`deploy-and-ci`** — secrets in workflows, action pinning, container security live both here and in deploy.
+- **`data-governance`** — PII in logs, encryption-at-rest gaps cross with governance.
+- **`code-smells`** — `update_column(:is_blocked)` is a smell *and* an auth-bypass risk; tag both.
+- **`foundation`** — CVEs from EOL Ruby/Rails surface here (security primary) and in foundation.
+
 ## Severity calibration
 
 | Pattern | Default tier |

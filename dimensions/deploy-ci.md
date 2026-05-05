@@ -155,6 +155,15 @@ If `cable.yml` falls back to `redis://localhost:6379` without env-based config �
 
 In deep mode, ask the user (don't actually trigger): "If a deploy went bad right now, what's the rollback command? Walk me through it." Capture answer in the report — undocumented rollback is a **High** finding.
 
+## Cross-cuts
+
+When tagging findings in this dimension, also consider these as `secondary_dimensions[]`:
+
+- **`security-and-authz`** — `force_ssl`, hardcoded secrets in workflows, and unpinned action SHAs are security findings too.
+- **`foundation`** — EOL Ruby/Rails surfaces here (CI builds against unsupported version) and in foundation.
+- **`reliability`** — DB pool sizing, no rollback path, and missing healthchecks affect reliability under load.
+- **`data-governance`** — prod-points-at-staging or unencrypted secrets in workflows are governance concerns.
+
 ## Severity calibration
 
 | Pattern | Default tier |

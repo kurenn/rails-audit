@@ -121,6 +121,14 @@ This is mostly external (PagerDuty / Opsgenie / Slack), but check:
 grep -i "slack\|pagerduty\|opsgenie\|teams\|notify" .github/workflows/*.yml 2>/dev/null
 ```
 
+## Cross-cuts
+
+- **`data-governance`** — PII in logs is governance primary; observability secondary.
+- **`security-and-authz`** — `filter_parameters` gaps and unscrubbed error tracker payloads cross with security.
+- **`deploy-and-ci`** — health/readyz/metrics endpoints are deploy primary; observability secondary.
+- **`reliability`** — APM and alerting feed reliability decisions.
+- **`background-jobs`** — job-failure visibility is jobs primary; observability secondary.
+
 ## Severity calibration
 
 | Pattern | Default tier |

@@ -152,6 +152,17 @@ This dimension overlaps with coverage. Money services should be at **≥85% line
 
 If money services have <50% coverage → escalate to **Blocker** in this dimension regardless of other metrics.
 
+## Cross-cuts
+
+Money findings often touch multiple dimensions. Default secondary tags:
+
+- **`background-jobs`** — payment jobs without retry/idempotency are both jobs *and* money issues.
+- **`reliability`** — missing timeouts on Stripe SDK, missing circuit breakers cross with reliability.
+- **`security-and-authz`** — webhook signature verification is security primary; money secondary.
+- **`data-integrity`** — multi-step money writes without `transaction do…end` cross with data integrity.
+- **`code-smells`** — `update_column` on `stripe_*` columns is a smell *and* money-relevant.
+- **`observability`** — money operations without audit trail or APM tracing surface here too.
+
 ## Severity calibration
 
 | Pattern | Default tier |

@@ -20,6 +20,12 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#2 — Cross-dimension finding tags)
+
+- **`## Cross-cuts` section** added to all 12 dimension files (`spec-and-coverage`, `deploy-ci`, `security-and-authz`, `money-and-payments`, `code-health`, `performance-reliability`, `background-jobs`, `observability`, `data-integrity`, `data-governance`, `dx-and-cost`, `domain-shape`). Each section documents the dimension's known overlaps so synthesis can populate `secondary_dimensions[]` consistently.
+- **`SKILL.md` Step 4** updated with explicit instructions for tagging cross-dimensional findings: pick the most-load-bearing dimension as primary, tag all applicable others in `secondary_dimensions[]`. Concrete examples (`update_column(:stripe_customer_id)`, Stripe webhook missing event-ID dedup, `force_ssl` disabled).
+- Per-dimension scorecards now meaningfully aggregate findings where the dimension appears in `primary_dimension` OR any `secondary_dimensions[]`.
+
 ## [0.1.0] — 2026-05-04
 
 Initial release.

@@ -238,6 +238,16 @@ grep -rnE "^[[:space:]]*# +(def |class |module |if |end |[A-Z]\w+\.)" app/ --inc
 
 Concentrations of commented-out code → **Medium** (likely dead). Use `debride` for actual dead-method detection.
 
+## Cross-cuts
+
+Code-smell findings frequently touch other dimensions. Default secondary tags:
+
+- **`data-integrity`** — `update_column`, `save(validate: false)`, missing unique indexes are integrity-relevant.
+- **`security-and-authz`** — smells on security columns (`is_admin`, `is_blocked`, `role`) are auth-relevant.
+- **`money-and-payments`** — smells on money columns (`stripe_*`, `amount_*`, `payout_*`) are money-relevant.
+- **`performance`** — fat methods, train wrecks in serializers correlate with N+1 risk.
+- **`risk-hotspots`** — a smell concentrated in a large file is both a smell *and* a hotspot.
+
 ## Severity calibration
 
 | Pattern | Default tier |

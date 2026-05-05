@@ -76,6 +76,13 @@ Each concern: 1-line summary of what it provides. Concerns named after a class (
 
 If there are >50 models, sketch the top-level domain clusters (e.g. "Users / Brands / Influencers" + "Campaigns / Collaboration Requests / Evidence" + "Payments / Payouts / Commissions"). Each cluster should map to a directory or naming pattern.
 
+## Cross-cuts
+
+Domain-shape findings are unusual — they're typically context, not findings. When they do produce a finding, common secondaries:
+
+- **`security-and-authz`** — mass-mutation routes on the unauthenticated tier are auth primary; domain-shape secondary.
+- **`risk-hotspots`** — overlapping layers (services + interactors) often correlate with hotspot files.
+
 ## Severity calibration
 
 This dimension rarely produces findings on its own. Use it for context. Flag **Medium** only when:

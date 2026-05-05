@@ -160,6 +160,14 @@ grep "good_job" config/database.yml config/initializers/good_job*.rb 2>/dev/null
 - Execution mode (`:async`, `:external`)?
 - Cleanup of old `good_jobs` rows configured?
 
+## Cross-cuts
+
+- **`money-and-payments`** — payment jobs without retry/idempotency cross both.
+- **`reliability`** — retries, dead-letter, locks are reliability primary if framing is "what happens when external services hiccup."
+- **`observability`** — job runtime visibility, failed-job alerting cross with observability.
+- **`security-and-authz`** — Sidekiq Web UI mounted without auth is security primary; jobs secondary.
+- **`data-integrity`** — jobs that mutate state without transactions cross with integrity.
+
 ## Severity calibration
 
 | Pattern | Default tier |
