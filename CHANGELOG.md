@@ -4,6 +4,11 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.5 milestone PR#3 — docs/lessons-learned.md)
+
+- New `docs/lessons-learned.md` capturing 8 build insights from the v0.3-v0.5 milestone work that should outlive any single CHANGELOG entry: the Ruby gsub/last_match gotcha, the C7 dimension-≤4 heuristic, the 25→30% blocker-pct paradox, why JSON-first matters, the bundle-audit-explosion-plus-inheritance pattern, the v0.3.0-as-plugin-restructure surprise, what was hardest to get right, and what I'd do differently next time.
+- Closes #52.
+
 ### Changed (v0.5 milestone PR#2 — C2 threshold: 25% → 30%)
 
 - C2 (blocker over-use) threshold raised from `> 0.25` to `> 0.30` in `dimensions/self-check.md`.
