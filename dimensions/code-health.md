@@ -269,3 +269,13 @@ Code-smell findings frequently touch other dimensions. Default secondary tags:
 | `rubycritic` F-grade in admin/legacy | Low |
 | TODO density ≥10 in one file | Medium |
 | Magic numbers in payment code | Medium |
+
+## Reference points
+
+- **[`rubocop/rubocop`](https://github.com/rubocop/rubocop)** — its own `.rubocop.yml` is a calibrated baseline.
+- **[`gitlabhq/gitlabhq`](https://gitlab.com/gitlab-org/gitlab)** — `.rubocop.yml` and the GitLab development docs cover concerns / service objects / form objects with explicit rationale.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — model layer is disciplined despite the project's size; `app/lib/` for value objects.
+- **[`troessner/reek`](https://github.com/troessner/reek)** — README has well-illustrated examples of each smell type with refactor patterns.
+- **[`thoughtbot/suspenders`](https://github.com/thoughtbot/suspenders)** — Rails template with opinionated linting + service-layer conventions baked in.
+
+_Linting configs drift — pin to a known-good commit when borrowing patterns._

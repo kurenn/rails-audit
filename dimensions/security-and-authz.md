@@ -237,3 +237,13 @@ When tagging findings here, also consider these as `secondary_dimensions[]`:
 | No CSP / `secure_headers` on HTML-rendering app | Medium |
 | `html_safe` / `raw` concentration | Medium |
 | `filter_parameters` doesn't include token/password | High |
+
+## Reference points
+
+- **[Rails Security Guide](https://guides.rubyonrails.org/security.html)** — official; covers OWASP-mapped patterns. Bookmark.
+- **[`varvet/pundit`](https://github.com/varvet/pundit)** — canonical AuthZ. Their README has good policy-spec patterns.
+- **[`rack/rack-attack`](https://github.com/rack/rack-attack)** — README shows rate-limit recipes for login / password reset / signup.
+- **[`heartcombo/devise`](https://github.com/heartcombo/devise)** — even if not used, their session/cookie defaults are a baseline.
+- **[`presidentbeef/brakeman`](https://github.com/presidentbeef/brakeman)** — not just a tool; the warnings doc is a security checklist in itself.
+
+_The Rails Security Guide is updated with each Rails release — always cite the current version._

@@ -92,3 +92,12 @@ This dimension rarely produces findings on its own. Use it for context. Flag **M
 - Mass-mutation routes (delete/refresh/recompute) exposed at the unauthenticated tier.
 
 Otherwise, no findings. Just orient the report.
+
+## Reference points
+
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — well-organized service layer; `app/services/` follows clear naming conventions.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — explicit `app/lib/` for value objects, `app/services/` for orchestration.
+- **[`gitlabhq/gitlabhq`](https://gitlab.com/gitlab-org/gitlab)** — large monolith with disciplined boundaries; their service-object base classes show consistent calling conventions.
+- **[Rails routing guide](https://guides.rubyonrails.org/routing.html)** — for canonical RESTful patterns and namespacing rationale.
+
+_Domain-shape findings are usually contextual — these references are for orientation, not patterns to cargo-cult._

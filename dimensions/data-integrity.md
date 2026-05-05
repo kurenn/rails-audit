@@ -164,3 +164,13 @@ For models with state, prefer an explicit state machine over a `status` string w
 | Migration `add_column null: false` without `default:` on large table | High |
 | Migration `add_index` without `concurrently:` on large table | High |
 | Counter cache without reconcile task | Low |
+
+## Reference points
+
+- **[`ankane/strong_migrations`](https://github.com/ankane/strong_migrations)** — README is a practical checklist for safe schema changes (NOT NULL adds, concurrent indexes, etc.).
+- **[GitLab database documentation](https://docs.gitlab.com/ee/development/database/)** — production-grade migration patterns, including their `add_concurrent_index` helper.
+- **[`aasm/aasm`](https://github.com/aasm/aasm)** — explicit state machines on Rails models; canonical for `status` columns.
+- **[`Shopify/identity_cache`](https://github.com/Shopify/identity_cache)** — for projects where counter caches need reconciliation.
+- **[Rails Active Record migrations guide](https://guides.rubyonrails.org/active_record_migrations.html)** — official reference for reversible migrations and `change` semantics.
+
+_strong_migrations rules update with each Rails major; pin to your project's gem version._

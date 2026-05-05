@@ -144,3 +144,13 @@ grep -i "slack\|pagerduty\|opsgenie\|teams\|notify" .github/workflows/*.yml 2>/d
 | No separate `/readyz` from `/healthz` | Medium |
 | No custom business metrics | Low–Medium (depends on app size) |
 | No alert routing for deploy failures | Medium |
+
+## Reference points
+
+- **[`roidrage/lograge`](https://github.com/roidrage/lograge)** — single-line JSON logging; README has Rails 7 setup.
+- **[`getsentry/sentry-ruby`](https://github.com/getsentry/sentry-ruby)** — `before_send` PII scrubbing patterns documented.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — Sentry config + structured logger setup are good references.
+- **[`ankane/blazer`](https://github.com/ankane/blazer)** — for projects that need internal dashboards over their own DB.
+- **[OpenTelemetry Ruby](https://github.com/open-telemetry/opentelemetry-ruby)** — vendor-neutral tracing.
+
+_Sentry's `before_send` API has shifted — verify against the version in your Gemfile._
