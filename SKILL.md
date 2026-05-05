@@ -102,6 +102,22 @@ The audit's value is bounded by which static tools are available. **Before fanni
 
 A reusable Gemfile snippet for the user to paste manually if they prefer is documented in `tooling.md` under "Recommended Gemfile additions".
 
+### Step 0.5. Estimate token cost
+
+After provisioning (Step 0) but before detect/fan-out, compute a token budget estimate using the heuristic in `dimensions/cost-estimation.md`. Store in `cost.estimated_input_tokens` and `cost.estimated_output_tokens`.
+
+If `--budget=<N>` is set explicitly, store in `cost.budget_tokens`.
+
+If `--budget` is **not** set AND `estimated_input_tokens > 30_000`, run prompt **P5** in `prompts.md`. Accepted answers:
+
+- `Y` (default) — proceed with no cap.
+- `n` — abort.
+- `budget=N` (or a bare number) — set `cost.budget_tokens = N` and proceed.
+
+When a budget is in effect, gate every agent call: before launching, compute `remaining = budget - usage_so_far`. If the agent's conservative upper-bound cost (use `per_dim_in + per_dim_out` per dimension in scope) would exceed `remaining`, skip the call. When the budget is hit, save the partial JSON, set `summary.verdict` to note the abort, and render a partial markdown report flagging missing dimensions.
+
+Hard floor: `budget_tokens < 5000` is rejected (no audit can fit).
+
 ### Step 1. Detect
 
 Confirm Rails project, capture orientation:
