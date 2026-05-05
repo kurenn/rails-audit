@@ -4,6 +4,19 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#1 — Calibration bundle: C6 stale coverage + C7 real-distribution override + cost constants)
+
+> Note: the v0.3 milestone is tracked under that label but ships as **v0.4.0** since v0.3.0 was already used for the plugin-restructure release.
+
+- **C6 — Stale coverage data** in `skills/rails-audit/dimensions/self-check.md`. Warns when `coverage/.last_run.json` or `.resultset.json` mtime is >30 days old. Affected `test-coverage` findings auto-marked `self_check.status: "unverified"`. Both v0.2 dogfood projects (influapp, coba) had Mar-2025 coverage data — would have fired this check.
+- **C7 — Real-distribution override** in `skills/rails-audit/dimensions/self-check.md`. When C1 (severity inflation) or C2 (blocker over-use) would fire, suppress them if all blockers are sed-verified AND `summary.risk_score ≤ 4` AND ≥6 dimensions score ≤4. Distinguishes "project-on-fire" from "synthesis-inflated." Emits its own diagnostic message.
+- **Cost calibration update** in `skills/rails-audit/dimensions/cost-estimation.md`:
+  - `per_kloc_in`: 200 → 300 (based on influapp v0.1 underestimate)
+  - New: `per_kloc_lib` = 100 (non-`app/` code factor — coba has Monex bindings under `lib/`)
+  - New: `per_kloc_eng` = 50 (engines/* factor, typically 0)
+  - Worked examples updated; influapp MAPE drops from ~16% to ~13%.
+- Closes #27 (C6), #28 (C7), #37 (cost calibration).
+
 ## [0.3.0] — 2026-05-05
 
 First release as an installable Claude Code plugin. Audit content unchanged from 0.2.0.
