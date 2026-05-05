@@ -20,6 +20,17 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#4 — `bin/check-tools` standalone command)
+
+- **`bin/check-tools`** — Ruby script that inventories rails-audit tooling in any Rails project.
+  - No args: human-readable tier-grouped table with Tool / Status / Version / Install hint.
+  - `--json`: machine-readable output matching the `tooling{}` block of `report.schema.json` (so it can be reused inside an audit run).
+  - `--required-only`: exits 1 if any Tier-1 tool is missing — useful as a CI pre-flight.
+  - `--help`: usage.
+- Reads `tooling.md` to extract tier definitions; only parses Tier 1–3 (Tier 4 is operational, not gems).
+- ANSI-strip + sanity-check on tool `--version` output to avoid showing error messages as version strings.
+- README documents the command.
+
 ### Added (v0.2 PR#3 — Formalize interactive prompts)
 
 - **`prompts.md`** — every user-facing question in the skill (P1–P7) documented in one file with question text, accepted answers + aliases, default, fallback, and side-effects.
