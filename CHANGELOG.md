@@ -4,6 +4,13 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#5 — Security-and-authz revalidation pass)
+
+- **`dimensions/security-revalidation.md`** — focused second pass on every finding tagged `security-and-authz` (primary or secondary). Mirrors money-revalidation pattern. Six checks: S-RV-1 token comparison (`secure_compare` discipline), S-RV-2 IDOR scoping, S-RV-3 trusted-header identity (JWT verification), S-RV-4 SQL interpolation (blocker default), S-RV-5 open redirect (host allowlist), S-RV-6 SSRF (private-IP block).
+- **`SKILL.md`** new **Step 4.6** between money revalidation (4.5) and self-check (5.5). Sets `findings[<id>].security_revalidation` to `confirmed`/`refined`/`rejected`/`promoted`.
+- Schema additive: `findings[].security_revalidation` field with same shape as `money_revalidation`. v0.2/v0.3 reports validate clean.
+- Closes #29.
+
 ### Changed (v0.3 milestone PR#4 — Harden self-check: warn-only → block-with-override)
 
 - **`dimensions/self-check.md`** — C1 (severity inflation), C2 (blocker over-use), C3 (unverified blocker) now block at Step 5.5 unless overridden. C4, C5, C6 remain warn-only. C7 still suppresses C1/C2 (its whole purpose).

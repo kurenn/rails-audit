@@ -280,6 +280,16 @@ For each finding in scope:
 
 Re-validation never modifies `id`, `primary_dimension`, or `secondary_dimensions[]`. Schema field `findings[].money_revalidation` is already defined as nullable in `schema/report.schema.json` from PR#1; the template renders `_Re-validated: <status>_` next to fix sketches.
 
+### Step 4.6. Security-and-authz revalidation (added v0.4)
+
+After money revalidation (Step 4.5), run a focused second pass on every finding tagged `security-and-authz` (in `primary_dimension` OR `secondary_dimensions[]`). See `dimensions/security-revalidation.md` for the full checklist.
+
+For each finding in scope, apply the six security re-checks: S-RV-1 token comparison (`secure_compare` discipline), S-RV-2 IDOR (`current_user.<association>` scoping), S-RV-3 trusted-header identity (JWT verification), S-RV-4 SQL interpolation (blocker default), S-RV-5 open redirect (host allowlist), S-RV-6 SSRF (private-IP block).
+
+Set `findings[<id>].security_revalidation` to `confirmed` / `refined` / `rejected` / `promoted` with `notes`. Same shape as `money_revalidation`. Schema field is additive (new in v0.4); v0.2/v0.3 reports validate clean.
+
+Proactive sweep paths: `app/controllers/**/*authenticate*.rb`, `app/controllers/api/**/*.rb`, `app/controllers/webhooks/**/*.rb`, anything with `Open3`/`system(`/backtick/`eval`/`instance_eval`, `app/models/` URL validators.
+
 ### Step 5.5 (was 5). Self-check the report
 
 Before rendering, run the self-check defined in `dimensions/self-check.md`. Seven checks (C1–C7) operate on the JSON from Step 4:
