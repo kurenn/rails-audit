@@ -139,7 +139,7 @@
         "id":          { "type": "string", "format": "uuid" },
         "started_at":  { "type": "string", "format": "date-time" },
         "finished_at": { "type": "string", "format": "date-time" },
-        "mode":        { "enum": ["quick", "standard", "deep"] },
+        "mode":        { "enum": ["quick", "standard", "deep", "continue", "from-findings"] },
         "scope": {
           "type": "array",
           "minItems": 1,
@@ -169,6 +169,21 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Stale ignore entries that match no current finding."
+        },
+        "calibration_overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check_id", "override_reason", "override_at"],
+            "properties": {
+              "check_id":        { "enum": ["C1", "C2"] },
+              "override_reason": { "type": "string", "minLength": 1 },
+              "override_at":     { "type": "string", "format": "date-time" },
+              "override_by":     { "type": "string" }
+            }
+          },
+          "description": "User-recorded overrides when self-check P7 is answered with `accept`. Added v0.4."
         }
       }
     },
@@ -271,6 +286,21 @@
               }
             }
           ]
+        },
+        "security_revalidation": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": { "enum": ["confirmed", "refined", "rejected", "promoted"] },
+                "notes":  { "type": "string" }
+              }
+            }
+          ],
+          "description": "Same shape as money_revalidation; populated by Step 4.6 (security revalidation). Added v0.4."
         }
       }
     },
@@ -340,7 +370,23 @@
         "prior_report_date":  { "type": "string", "format": "date" },
         "fixed_ids":          { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
         "new_ids":            { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
-        "persisted_ids":      { "type": "array", "items": { "$ref": "#/$defs/finding_id" } }
+        "persisted_ids":      { "type": "array", "items": { "$ref": "#/$defs/finding_id" } },
+        "moved_ids": {
+          "type": "array",
+          "description": "Populated only when --track-renames is enabled. Each entry is a fuzzy-matched pair across files. Added v0.4.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["prior_id", "current_id"],
+            "properties": {
+              "prior_id":         { "$ref": "#/$defs/finding_id" },
+              "current_id":       { "$ref": "#/$defs/finding_id" },
+              "prior_location":   { "type": "object" },
+              "current_location": { "type": "object" },
+              "match_score":      { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
       }
     },
 

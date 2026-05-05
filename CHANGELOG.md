@@ -4,6 +4,121 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-05
+
+> The v0.3 milestone shipped under this version number — v0.3.0 was already used for the plugin-restructure release on the same day. Ten PRs across calibration + synthesis quality + ergonomics + polish phases, driven by the v0.2 dogfood evidence on influapp + coba.
+
+### Highlights
+
+- **Self-check hardened** from warn-only → block-with-override. C1, C2, C3 now block at Step 5.5 unless C7 overrides or the user explicitly accepts/demotes.
+- **Calibration override C7** suppresses C1/C2 when blockers are sed-verified and the project legitimately has broad defect density. Both v0.2 dogfoods would have qualified.
+- **Stale-coverage check C6** catches the SimpleCov-data-not-refreshed-in-CI failure mode both v0.2 dogfoods exhibited.
+- **Tracked-secrets scanner** (`bin/scan-secrets`) runs as Step 1.5; auto-blocker findings on private keys / credentials / cloud SA JSONs. Found `lib/certs/production.pem` on influapp the v0.2 agents missed.
+- **Tool-output parsers** (`bin/parse-brakeman`, `parse-bundle-audit`, `parse-rubocop`) convert raw tool JSON/text into ready-to-merge finding stubs with stable fingerprints. Surfaced 64 individual bundle-audit advisories on influapp where v0.2 had 3 aggregated findings.
+- **Security revalidation** (Step 4.6) mirrors v0.2's money revalidation. Six checks: token comparison, IDOR, trusted-header identity, SQL interpolation, open redirect, SSRF.
+- **`--continue` / `--from-findings`** re-run modes skip detect + agent fan-out (~5K vs ~50K tokens).
+- **`--only-cluster=A,B`** cluster-level scoping atop v0.2's per-dimension scoping.
+- **`--track-renames`** opt-in fuzzy matching for moved findings across file renames; preserves first_seen for age tracking.
+- **Multi-file output** when reports exceed 30 KB (split into summary / findings / appendix sub-files).
+- **Link-rot CI** weekly checks reference URLs in dimension files; opens tracking issue on rot.
+
+### Added (v0.3 milestone PR#10 — Link-rot CI for reference points)
+
+- New GitHub Actions workflow `.github/workflows/check-references.yml`. Runs weekly (Mondays 09:00 UTC) and on manual dispatch. Extracts URLs from the `## Reference points` sections of `skills/rails-audit/dimensions/*.md`, HEAD-checks each, and opens (or updates) a tracking issue tagged `link-rot` listing the rotted URLs.
+- Workflow is read-only on the repo content; only writes to issues. Uses `secrets.GITHUB_TOKEN` (no PAT needed).
+- New `link-rot` label created on the repo for tagging the auto-generated issue.
+- Closes #35.
+
+### Added (v0.3 milestone PR#9 — Multi-file output for large reports)
+
+- **Single-file mode** (default, < 30 KB) — unchanged: `report-YYYY-MM-DD.{json,md}`.
+- **Multi-file mode** (≥ 30 KB) — splits into 4 files:
+  - `report-YYYY-MM-DD.json` (single source of truth, unchanged)
+  - `report-YYYY-MM-DD.md` (top-level index with anchor links)
+  - `report-YYYY-MM-DD-summary.md` (exec summary + scorecards + fix sequence)
+  - `report-YYYY-MM-DD-findings.md` (full punch list)
+  - `report-YYYY-MM-DD-appendix.md` (tooling, coverage, hotspots, ignored, cost)
+- Sub-files inherit the report header so each is self-contained when read alone.
+- Force a mode via `--single-file` or `--multi-file`; default measures and chooses.
+- Threshold (30 KB) tunable via `.claude/rails-audit.yml` if needed in future.
+- influapp v0.2 markdown is ~22 KB; coba ~25 KB. Both stay single-file. Trigger fires on larger projects (e.g. 50+ findings) or `--deep` mode reports.
+- Closes #36.
+
+### Added (v0.3 milestone PR#8 — Rename detection in fingerprints)
+
+- **`--track-renames`** CLI flag (and `track_renames: true` in `.claude/rails-audit.yml`) opts in to fuzzy-matching fixed+new pairs as moved findings. Default off — keeps trends precise.
+- **Algorithm**: pair a `fixed_id` with a `new_id` if same `primary_dimension` + same finding-type + `evidence.normalized` Levenshtein distance ≤ 20% of prior length OR ≤ 30 chars absolute (whichever is larger). Tunable via `rename_distance_pct`.
+- **Schema additive**: `trend.moved_ids[]` array with `{prior_id, current_id, prior_location, current_location, match_score}`. Removed pairs are taken out of `fixed_ids` and `new_ids`. v0.2/v0.3 reports validate clean against the v0.4 schema.
+- `first_seen` propagates from prior to current for moved findings — age preserved.
+- Trade-off documented: false positives possible (two unrelated `update_column` findings could match). False positives visible in the trend table for user inspection.
+- Closes #34.
+
+### Added (v0.3 milestone PR#7 — Cluster-level scoping)
+
+- **`--only-cluster=<list>`** and **`--exclude-cluster=<list>`** in SKILL.md "Scope arguments". Accepts cluster letters (`A`/`B`/`C`/`D`) or English aliases (`spec`/`deploy`/`health`/`security`).
+- **Cluster aliases** documented in their own section: A=Spec/Coverage, B=Deploy/CI/Obs+Foundation, C=Code Health (9 dimensions), D=Security/Money/Gov+Authz.
+- **Note on `security` ambiguity**: in `--only` it means the single dimension; in `--only-cluster` it means the broad cluster D. Documented inline.
+- **Mutually-exclusive validation**: at most one of `--only`/`--exclude`/`--only-cluster`/`--exclude-cluster` may be set.
+- Closes #33.
+
+### Added (v0.3 milestone PR#6 — Tool-output parsers: bin/parse-brakeman, parse-bundle-audit, parse-rubocop)
+
+- **`bin/parse-brakeman`** — read `tmp/rails-audit/brakeman.json`, emit finding stubs ready to merge into `findings[]`. Maps brakeman warning types to dimensions + severity (e.g. SQL Injection → blocker; Format Validation → high; Cross Site Scripting → high). Confidence levels (High/Medium/Weak) modulate severity. Filters known false positives (array-form `Open3.capture3` — argv, no shell). Stable fingerprints prefixed `f-bk-`.
+- **`bin/parse-bundle-audit`** — read `bundle-audit check` text output, parse text-record format (`Name:`, `Version:`, `CVE:`, etc.), emit stubs. Maps `Criticality` to severity (Critical/High → blocker; Medium → high; Unknown → high conservatively). Stable fingerprints prefixed `f-ba-`. Discovered a Ruby gotcha during dogfood: `Regexp.last_match` is clobbered by intervening `String#gsub` calls — fixed by capturing match groups into local variables before subsequent regex operations.
+- **`bin/parse-rubocop`** — read `rubocop --format json`, aggregate by severity + cop. Emits the `appendices.rubocop_offenses` shape from `report.schema.json`. Does not produce per-offense findings (style offenses are noise as findings; aggregate is the right granularity).
+- **`SKILL.md` Step 2** updated to invoke the parsers after tool runs; their JSON outputs land in `tmp/rails-audit/*-stubs.json` and merge into synthesis at Step 4.
+- All three scripts: stdlib only, `--table` for human-readable, `--help` for usage.
+- Calibration evidence: parse-bundle-audit on influapp surfaces **64 advisories** (17 blockers + 46 highs) — the v0.2 audit had "uri CVEs" + "thor CVE" as a 3-finding aggregate. Granularity unlocks per-CVE trend tracking.
+- Closes #30.
+
+### Added (v0.3 milestone PR#5 — Security-and-authz revalidation pass)
+
+- **`dimensions/security-revalidation.md`** — focused second pass on every finding tagged `security-and-authz` (primary or secondary). Mirrors money-revalidation pattern. Six checks: S-RV-1 token comparison (`secure_compare` discipline), S-RV-2 IDOR scoping, S-RV-3 trusted-header identity (JWT verification), S-RV-4 SQL interpolation (blocker default), S-RV-5 open redirect (host allowlist), S-RV-6 SSRF (private-IP block).
+- **`SKILL.md`** new **Step 4.6** between money revalidation (4.5) and self-check (5.5). Sets `findings[<id>].security_revalidation` to `confirmed`/`refined`/`rejected`/`promoted`.
+- Schema additive: `findings[].security_revalidation` field with same shape as `money_revalidation`. v0.2/v0.3 reports validate clean.
+- Closes #29.
+
+### Changed (v0.3 milestone PR#4 — Harden self-check: warn-only → block-with-override)
+
+- **`dimensions/self-check.md`** — C1 (severity inflation), C2 (blocker over-use), C3 (unverified blocker) now block at Step 5.5 unless overridden. C4, C5, C6 remain warn-only. C7 still suppresses C1/C2 (its whole purpose).
+- **`prompts.md` P7** — redesigned. Was `show / demote / accept` with default `show` (v0.2/v0.3). Now `block / demote / accept` with default `block`. New auto-demote algorithm specified (smallest-evidence-first heuristic for C1; small-time-estimate-first for C2). `accept` requires a free-form non-empty reason recorded in `audit.calibration_overrides[]`.
+- **`SKILL.md` Step 5.5** — explicit block behavior documented; partial JSON written on block; markdown not rendered.
+- **Schema** — new `audit.calibration_overrides[]` field (additive). Records `{check_id, override_reason, override_at, override_by}` when P7 `accept` is picked.
+- C3 (unverified blocker) always blocks with no `accept` option — hallucination risk must be addressed.
+- Backwards-compat: v0.2/v0.3 reports validate cleanly against the v0.4 schema (the new `calibration_overrides` is optional).
+- Closes #26.
+
+### Added (v0.3 milestone PR#3 — Re-run modes: --continue and --from-findings)
+
+- **`--continue`** — load most recent `report-*.json` in `tmp/rails-audit/`; re-run only Step 1.5 (secrets scan) + Steps 4.4 onward (ignores, revalidations, self-check, trend, render). Skips detect + agent fan-out. ~5K tokens vs ~50K for a fresh standard audit.
+- **`--from-findings=<path>`** — same shape but loads from an explicit JSON path (hand-edited or copied from another run). Useful for what-if analysis.
+- Schema update: `audit.mode` enum extended with `"continue"` and `"from-findings"` (additive, backwards-compatible).
+- Behavior documented in `SKILL.md` "Re-run modes" section: skip Steps 1–3, run secrets scan + Steps 4.4 onward, link trend chain via the loaded report's prior_report_path.
+- Hard rules: mutually exclusive with each other and with the initial-audit modes; schema_version of loaded report must match current.
+- Closes #32.
+
+### Added (v0.3 milestone PR#2 — Tracked-secrets scanner: bin/scan-secrets + Step 1.5)
+
+- **`bin/scan-secrets`** — Ruby script (stdlib only) enumerating `git ls-files` and matching against secret-shaped filename patterns. Emits human-readable table by default; `--json` for machine-readable; `--strict` for CI exit-code mode.
+- Patterns include: `.pem`, `.p12`, `.pfx`, `.keystore`, `id_rsa`/`id_ed25519`, `*credentials*.json` (including google-cloud, firebase-admin, gcp-key, aws-credentials), `credentials.txt`/`secrets.txt`, `.env.production`/`.env.*`, `circle_wallets.txt`, PII-shaped CSVs (`users.csv`, `members.csv`, etc.).
+- Excludes public certs (`.crt`, `.cer`, `.cert`, `.ca`, `.pub`), `*.example`/`*.sample`/`*.template`, files under `spec/`/`test/`/`fixtures/`.
+- **`SKILL.md` Step 1.5** invokes the scanner before static tooling. Findings auto-tagged blocker (or high for ambiguous), `phase: 1`, `primary_dimension: security-and-authz`. Routed straight into `findings[]` during synthesis.
+- Calibration evidence: scanner found a tracked `.pem` in influapp that the v0.2 agent fan-out missed. Coba scan finds 8 tracked secrets (matching the v0.2 agent's manual finding plus 2 more).
+- Closes #31.
+
+### Added (v0.3 milestone PR#1 — Calibration bundle: C6 stale coverage + C7 real-distribution override + cost constants)
+
+> Note: the v0.3 milestone is tracked under that label but ships as **v0.4.0** since v0.3.0 was already used for the plugin-restructure release.
+
+- **C6 — Stale coverage data** in `skills/rails-audit/dimensions/self-check.md`. Warns when `coverage/.last_run.json` or `.resultset.json` mtime is >30 days old. Affected `test-coverage` findings auto-marked `self_check.status: "unverified"`. Both v0.2 dogfood projects (influapp, coba) had Mar-2025 coverage data — would have fired this check.
+- **C7 — Real-distribution override** in `skills/rails-audit/dimensions/self-check.md`. When C1 (severity inflation) or C2 (blocker over-use) would fire, suppress them if all blockers are sed-verified AND `summary.risk_score ≤ 4` AND ≥6 dimensions score ≤4. Distinguishes "project-on-fire" from "synthesis-inflated." Emits its own diagnostic message.
+- **Cost calibration update** in `skills/rails-audit/dimensions/cost-estimation.md`:
+  - `per_kloc_in`: 200 → 300 (based on influapp v0.1 underestimate)
+  - New: `per_kloc_lib` = 100 (non-`app/` code factor — coba has Monex bindings under `lib/`)
+  - New: `per_kloc_eng` = 50 (engines/* factor, typically 0)
+  - Worked examples updated; influapp MAPE drops from ~16% to ~13%.
+- Closes #27 (C6), #28 (C7), #37 (cost calibration).
+
 ## [0.3.0] — 2026-05-05
 
 First release as an installable Claude Code plugin. Audit content unchanged from 0.2.0.
@@ -98,6 +213,8 @@ Initial release.
 - Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
 - Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
 
-[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.4.0
+[0.3.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.1.0

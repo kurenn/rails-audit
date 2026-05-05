@@ -123,12 +123,58 @@ In the markdown report, `## Trend` appears between `## Recommended fix sequence`
 
 ---
 
+## --track-renames mode (added v0.4)
+
+By default, the locked-in fingerprint algorithm is unstable across file renames — a moved finding shows as `fixed + new`. That's the right default: any rename is real code change worth highlighting.
+
+For projects where renames are common (active refactoring, monorepo splits), opt in with **`--track-renames`** in trend computation:
+
+1. For each `fixed_id` (in prior, not in current), look at its prior `primary_dimension` and finding-type (derived from title prefix).
+2. For each `new_id` (in current, not in prior), look at the same.
+3. Pair them if all of:
+   - Same `primary_dimension`.
+   - Same finding-type (e.g. "Command Injection", "update_column on …", "Stripe webhook missing …").
+   - `evidence.normalized` Levenshtein distance ≤ 20% of the prior length OR ≤ 30 characters absolute, whichever is larger.
+4. Each pair becomes a `trend.moved_ids[]` entry and is **removed** from both `fixed_ids` and `new_ids`.
+5. The current finding's `first_seen` propagates from the prior — age is preserved.
+
+### Trade-offs
+
+Fuzzy matching can produce false positives. Two unrelated `update_column` findings in the same dimension could match. False positives are visible in the trend table — the user can spot a wrong pair by inspecting `prior_location` vs `current_location`.
+
+### Configuration
+
+`.claude/rails-audit.yml`:
+
+```yaml
+track_renames: false       # default — explicit opt-in keeps trends precise
+rename_distance_pct: 0.20  # tunable — higher = looser matches
+```
+
+CLI override: `--track-renames` forces it on for one run regardless of config.
+
+### Schema (additive)
+
+`trend.moved_ids[]`:
+
+```json
+"moved_ids": [
+  {
+    "prior_id":         "f-9c8a3b...",
+    "current_id":       "f-2d4e6f...",
+    "prior_location":   { "file": "app/services/payments/payout.rb", "line": 35 },
+    "current_location": { "file": "app/services/payouts/processor.rb", "line": 41 },
+    "match_score":      0.85
+  }
+]
+```
+
 ## What this dimension deliberately does *not* do
 
-- **Does not track fingerprints across renames.** The locked-in fingerprint algorithm is stable across line moves but unstable across renames — a rename is "fixed + new" by design. Future v0.3 may add an optional `--track-renames` mode that fuzz-matches title + dimension across renamed files.
+- **Does not track renames by default.** Opt-in only.
 - **Does not fall back gracefully on schema version mismatch.** If the prior report is `schema_version: 1` (or anything other than the current schema), trend is set to null with `audit.ignore_warnings[]` noting the version skew.
-- **Does not measure score velocity.** The trend table shows deltas, not rates of change. Multi-run velocity is a v0.3 idea if needed.
-- **Does not auto-archive prior reports.** Old reports stay in `tmp/rails-audit/` until the user cleans them up. v0.3 may add a retention policy (keep most recent N).
+- **Does not measure score velocity.** The trend table shows deltas, not rates of change. Multi-run velocity is a v0.5+ idea if needed.
+- **Does not auto-archive prior reports.** Old reports stay in `tmp/rails-audit/` until the user cleans them up. v0.5+ may add a retention policy (keep most recent N).
 
 ---
 

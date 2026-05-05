@@ -106,18 +106,35 @@ Free-form text input. The skill writes:
 
 ---
 
-## P7 — Self-check warning surfaced to user (Step 5.5, when calibration warnings fire)
+## P7 — Self-check **block** (v0.4+, Step 5.5, when C1/C2 fire AND C7 doesn't override)
 
-> "The self-check raised `<N>` calibration warnings (e.g., `<first warning>`). Show details, demote findings, or accept and continue? \[show/demote/accept]"
+> "Self-check is blocking: \<N\> calibration warnings (e.g., \<first warning\>). The skill won't ship the report until you decide. **Block** (default — investigate findings, re-run later), **demote** (auto-demote inflated severities one tier and ship), or **accept** (record an override reason and ship)? \[block/demote/accept]"
 
 | Answer | Aliases | Behavior |
 |---|---|---|
-| `show` | `s`, `details`, `<empty>` | Print the full warning list with affected finding IDs. Then re-ask. |
-| `demote` | `d`, `fix`, `auto` | For severity-inflation warnings, the skill auto-demotes findings (high → medium, blocker → high) using its own judgment. Marks `self_check.status: "demoted"` per finding. |
-| `accept` | `a`, `keep`, `ignore` | Continue with warnings noted in report but no demotions. |
+| `block` | `b`, `stop`, `<empty>`, `n` | Skill aborts at Step 5.5. Partial JSON written to `tmp/rails-audit/report-YYYY-MM-DD-blocked.json` for inspection. Markdown not rendered. User fixes findings (or runs `--continue` after fixes) and re-runs. |
+| `demote` | `d`, `fix`, `auto` | Skill auto-demotes one tier (high → medium for C1; blocker → high for C2). Each demoted finding gets `self_check.status: "demoted"` with a `notes` line citing the check. Skill proceeds to render. |
+| `accept` | `a`, `keep`, `ignore` | Skill prompts for a free-form reason (required, non-empty), records it in `audit.calibration_overrides[]`, and proceeds. |
 
-**Default:** `show`.
-**Fallback:** re-ask with the three options spelled out.
+**Default:** `block`.
+**Fallback:** re-ask once with the three options spelled out. If still ambiguous, default to `block`.
+
+**v0.2/v0.3 behavior** (warn-only) — the prompt was `show/demote/accept` with default `show`. If a user is on v0.2/v0.3, the skill never blocks regardless of the answer. v0.4 changes the default to `block` and removes the `show` option (P7 is now a decision prompt, not a discovery prompt).
+
+**Auto-demote algorithm** (when user picks `demote`):
+- For C1 (severity inflation): identify findings tagged `high` whose evidence/explanation is the weakest (heuristic: shortest `evidence.snippet`). Demote them one tier (`high` → `medium`) until `high_pct ≤ 0.40`. Sort to remove findings without time_estimate first.
+- For C2 (blocker over-use): identify findings tagged `blocker` with `time_estimate: "5m"` or `"1h"` (small fixes are rarely true blockers). Demote one tier (`blocker` → `high`) until `blocker_pct ≤ 0.25`.
+- A finding can be demoted at most once per audit. The `self_check.notes` records the original severity for trend tracking.
+
+**`accept` reason format** (when user picks `accept`):
+
+```yaml
+# audit.calibration_overrides[]
+- check_id: "C1"               # or C2
+  override_reason: "..."        # the user's text
+  override_at: "2026-05-05T15:00:00Z"
+  override_by: <git config user.email>
+```
 
 ---
 

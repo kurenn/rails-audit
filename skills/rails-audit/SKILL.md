@@ -17,13 +17,26 @@ If the user invokes `/rails-audit` with no mode, ask using prompt **P1** in `pro
 
 ## Scope arguments
 
-By default an audit covers all 18 dimensions. Two args narrow the scope:
+By default an audit covers all 18 dimensions. Several args narrow the scope:
 
 - **`--only=<comma-list>`** — run only these dimensions (or aliases). Example: `/rails-audit --only=money,security`.
 - **`--exclude=<comma-list>`** — run all dimensions *except* these. Example: `/rails-audit --exclude=dx-and-cost,observability`.
-- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>`. Example: `/rails-audit money` ≡ `/rails-audit --only=money`.
+- **`--only-cluster=<list>`** (added v0.4) — run only these clusters. Accepts cluster letters (`A`/`B`/`C`/`D`) or English aliases (`spec`/`deploy`/`health`/`security`). Example: `/rails-audit --only-cluster=A,D`.
+- **`--exclude-cluster=<list>`** (added v0.4) — run all clusters except these.
+- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>` (or `--only-cluster=<arg>` if it matches a cluster letter). Example: `/rails-audit money`, `/rails-audit A`.
 
-Mutually exclusive: `--only` and `--exclude` cannot be combined; reject with an error.
+**Mutually exclusive groups**: at most one of `--only`, `--exclude`, `--only-cluster`, `--exclude-cluster` may be set. Reject combinations with an error.
+
+### Cluster aliases (added v0.4)
+
+| Alias | Letter | Dimensions covered |
+|---|---|---|
+| `spec` | `A` | `spec-stability`, `test-coverage` |
+| `deploy` | `B` | `foundation`, `deploy-and-ci`, `observability` |
+| `health` | `C` | `domain-shape`, `risk-hotspots`, `code-smells`, `performance`, `reliability`, `background-jobs`, `data-integrity`, `developer-experience`, `cost-and-scaling` |
+| `security` | `D` | `security-and-authz`, `authorization`, `money-and-payments`, `data-governance` |
+
+Note: `security` resolves to **cluster D** in `--only-cluster`, but to the single dimension `security-and-authz` in `--only`. Use the cluster flag to mean "the broad security audit slice including money + governance + authorization."
 
 ### Aliases (case-insensitive)
 
@@ -52,8 +65,9 @@ Dimension names accepted directly (e.g. `money-and-payments`) as well.
 ### Validation
 
 - Unknown dimension or alias → reject with `"Unknown dimension '<name>'. Did you mean '<closest-match>'?"` and exit. Use Levenshtein distance ≤2 for the suggestion.
-- `--only=` empty (no dimensions) → reject.
-- Both `--only` and `--exclude` set → reject.
+- Unknown cluster letter or alias → reject with `"Unknown cluster '<name>'. Valid: A, B, C, D, or spec/deploy/health/security."`
+- `--only=` (or `--only-cluster=`) empty → reject.
+- More than one of `--only`/`--exclude`/`--only-cluster`/`--exclude-cluster` set → reject.
 
 ### Behavior
 
@@ -77,6 +91,45 @@ When scope is narrower than `all`:
 6. **Self-check (Step 5.5)** runs in scoped mode too — calibration percentages compute over the scoped finding set.
 
 7. **Trend (Step 7)** compares only the scoped slice of findings against the prior report's matching slice.
+
+## Re-run modes (added v0.3)
+
+Beyond the initial-audit modes (Quick / Standard / Deep), the skill supports two **re-run** modes that skip detect + agent fan-out and re-use prior findings.
+
+- **`--continue`** — load the most recent `report-*.json` in `tmp/rails-audit/` and re-run only Steps 4.4 onward (apply ignores, money-revalidation, security-revalidation, self-check, trend, render). Skip Steps 1–3 entirely. Useful after fixing N findings and wanting fresh self-check + trend data without rerunning the full ~50K-token agent fan-out.
+
+- **`--from-findings=<path>`** — load findings from a specific JSON file (could be hand-edited or copied from another run). Re-run pipeline from Step 4.4 against that input. Useful for what-if analysis or for surfacing a different prior baseline.
+
+### Behavior
+
+When `--continue` or `--from-findings` is set:
+
+1. **Skip Step 1 (Detect)**, but copy `audit.stack`, `audit.commit`, `audit.branch` from the loaded report — re-detected only if `--re-detect` is also set.
+2. **Skip Step 2 (Static tooling)**. Tool output is *not* re-captured. Tooling appendix in the new report is copied from the loaded report with a `(continued from <prior date>)` annotation.
+3. **Skip Step 3 (Agent fan-out)** entirely.
+4. **Run Step 1.5 (Tracked-secrets scan)** — fast, deterministic, catches new secrets that may have been added since the prior run.
+5. **Run Step 4.4 (Apply `.audit-ignore.yml`)** — load the file fresh; surface stale ignores.
+6. **Run Step 4.5 (Money revalidation)** if any money findings remain after ignores.
+7. **Run Step 5.5 (Self-check)** including new C6 / C7 logic.
+8. **Run Step 5.7 (Trend)** with the loaded report itself as prior. *Re-run trend uses the loaded report's `trend.prior_report_path` if present so the chain stays linked.*
+9. **Render and write** new `report-YYYY-MM-DD.{json,md}` files with `audit.mode` set to `"continue"`.
+
+### When to use which
+
+| Scenario | Mode | Cost |
+|---|---|---|
+| First audit on a project | `--standard` (default) | ~50K tokens |
+| Re-audit after fixing 3 blockers | `--continue` | ~5K tokens |
+| Compare a hand-edited finding set | `--from-findings=fixed-baseline.json` | ~5K tokens |
+| Same as previous run but with re-detected stack | `--continue --re-detect` | ~6K tokens |
+| Full fresh audit | `--standard` (or `--quick`) | ~50K / ~13K tokens |
+
+### Hard rules
+
+- `--continue` and `--from-findings` are mutually exclusive.
+- `--continue` errors out cleanly if no prior report exists in `tmp/rails-audit/`.
+- The schema_version of the loaded report must match the current skill's; otherwise abort with a migration suggestion (`"Prior report schema_version <N> incompatible with current <M>; run a fresh audit"`).
+- `audit.mode` in the new report records `"continue"` or `"from-findings"` (NOT the original mode of the loaded report).
 
 ## Workflow
 
@@ -137,6 +190,23 @@ Read `.claude/rails-audit.yml` if present (project profile — see "Project prof
 - **Auth**: `Gemfile` greps — `devise`, `warden`, `jwt`, `clearance`, `doorkeeper`.
 - **Test framework**: `.rspec` exists → RSpec; `test/` exists → Minitest.
 
+### Step 1.5. Scan tracked secrets (added v0.3)
+
+Before running static tooling, run `bin/scan-secrets --json > tmp/rails-audit/secrets.json` from the project root. The script enumerates `git ls-files`, matches against secret-shaped filename patterns (`.pem`, `.p12`, `.pfx`, `.keystore`, `id_rsa`, `*credentials*.json`, `credentials.txt`, `secrets.txt`, `.env.production`, etc.), and emits ready-to-merge finding stubs.
+
+Each match is auto-blocker by default (private keys, GCP service-account JSONs, AWS credentials) — tracked secrets are permanently compromised by definition. Exclusions: `.crt`/`.cer`/`.cert`/`.ca`/`.pub` (public certs), files matching `*.example`, `*.sample`, `*.template`, anything under `spec/`, `test/`, or `fixtures/`.
+
+The findings stubs go directly into `findings[]` during synthesis (Step 4). Their `phase` is always 1 — secret rotation must precede any other work.
+
+If a finding is a false positive (e.g. an intentionally-tracked dummy `.pem` for testing), the user can add it to `.audit-ignore.yml` post-audit. The scanner does not attempt to read file *contents* — only filename patterns — so it cannot distinguish "dummy test cert" from "production key" by content. The `.audit-ignore.yml` mechanism is the right escape hatch.
+
+The scanner is also available standalone:
+
+```bash
+bin/scan-secrets                # human-readable table
+bin/scan-secrets --strict       # exit 1 if any tracked secret-shaped file is found (CI gate)
+```
+
 ### Step 2. Run static tooling in parallel
 
 See `tooling.md` for the full contract. Capture all output to `tmp/rails-audit/`:
@@ -146,6 +216,22 @@ mkdir -p tmp/rails-audit
 ```
 
 Then run available tools in parallel Bash calls. Skip silently if not installed (note absence in the report's tooling section). For Bundler-managed tools, prefix with `bundle exec` if Gemfile lists them; otherwise try the bare command.
+
+**v0.4 — parse tool output via `bin/parse-*` scripts.** After the tools finish, invoke the parsers to convert raw output into ready-to-merge finding stubs:
+
+```bash
+bin/parse-brakeman      tmp/rails-audit/brakeman.json     > tmp/rails-audit/brakeman-stubs.json
+bin/parse-bundle-audit  tmp/rails-audit/bundle-audit.txt  > tmp/rails-audit/bundle-audit-stubs.json
+bin/parse-rubocop       tmp/rails-audit/rubocop.json      > tmp/rails-audit/rubocop-aggregate.json
+```
+
+The brakeman + bundle-audit stubs go into `findings[]` during synthesis (Step 4). The rubocop aggregate goes into `appendices.rubocop_offenses`. Each parser:
+- Emits JSON shaped to match the report schema's `findings[]` (or `appendices.*`).
+- Filters known false positives (`parse-brakeman` drops array-form `Open3.capture3` — argv, no shell).
+- Maps tool-specific severity to the rubric's 4-tier scale.
+- Generates stable fingerprints prefixed `f-bk-` (brakeman), `f-ba-` (bundle-audit) so the same warning produces the same id across runs (good for trend tracking).
+
+Synthesis (Step 4) then merges parser stubs with agent findings, dedupes by fingerprint and by `(file, line, finding_type)` overlap.
 
 ### Step 3. Fan out to subagents
 
@@ -224,19 +310,39 @@ For each finding in scope:
 
 Re-validation never modifies `id`, `primary_dimension`, or `secondary_dimensions[]`. Schema field `findings[].money_revalidation` is already defined as nullable in `schema/report.schema.json` from PR#1; the template renders `_Re-validated: <status>_` next to fix sketches.
 
+### Step 4.6. Security-and-authz revalidation (added v0.4)
+
+After money revalidation (Step 4.5), run a focused second pass on every finding tagged `security-and-authz` (in `primary_dimension` OR `secondary_dimensions[]`). See `dimensions/security-revalidation.md` for the full checklist.
+
+For each finding in scope, apply the six security re-checks: S-RV-1 token comparison (`secure_compare` discipline), S-RV-2 IDOR (`current_user.<association>` scoping), S-RV-3 trusted-header identity (JWT verification), S-RV-4 SQL interpolation (blocker default), S-RV-5 open redirect (host allowlist), S-RV-6 SSRF (private-IP block).
+
+Set `findings[<id>].security_revalidation` to `confirmed` / `refined` / `rejected` / `promoted` with `notes`. Same shape as `money_revalidation`. Schema field is additive (new in v0.4); v0.2/v0.3 reports validate clean.
+
+Proactive sweep paths: `app/controllers/**/*authenticate*.rb`, `app/controllers/api/**/*.rb`, `app/controllers/webhooks/**/*.rb`, anything with `Open3`/`system(`/backtick/`eval`/`instance_eval`, `app/models/` URL validators.
+
 ### Step 5.5 (was 5). Self-check the report
 
-Before rendering, run the self-check defined in `dimensions/self-check.md`. The five checks (C1–C5) operate on the JSON from Step 4:
+Before rendering, run the self-check defined in `dimensions/self-check.md`. Seven checks (C1–C7) operate on the JSON from Step 4:
 
-- **C1** Severity inflation — warn if `>40%` of findings are `high`
-- **C2** Blocker over-use — warn if `>25%` are `blocker`
-- **C3** Unverified blocker — for each blocker, `sed -n '<line>p' <file>` must contain a substring of `evidence.normalized`. Fail → mark `findings[<id>].self_check.status = "unverified"` and add to `self_check.unverified_blockers[]`
-- **C4** Phase dependency mismatch — `findings[id].phase` must equal `fix_sequence[].finding_ids` references
-- **C5** Scorecard ↔ finding-count mismatch — per-dimension score must fall in the expected band given the weighted finding count for that dimension (blocker=4, high=3, medium=2, low=1)
+- **C1** Severity inflation — `>40%` of findings are `high` (warn unless C7 overrides)
+- **C2** Blocker over-use — `>25%` are `blocker` (warn unless C7 overrides)
+- **C3** Unverified blocker — each blocker's cited line must `sed -n '<line>p' <file>` confirm a substring of `evidence.normalized` (always fires; no override)
+- **C4** Phase dependency mismatch (warn-only)
+- **C5** Scorecard ↔ finding-count mismatch (warn-only)
+- **C6** Stale coverage — `coverage/.resultset.json` mtime > 30 days (warn-only)
+- **C7** Real-distribution override — suppresses C1/C2 when blockers all verified AND `risk_score ≤ 4` AND ≥6 dimensions ≤4
 
-In **v0.2** these are warn-only: results land in `self_check.calibration.warnings[]` and per-finding `self_check{}`, no findings are removed or demoted. If warnings fire and the user is interactively driving the audit, prompt **P7** (`prompts.md`) — show / demote / accept. Default is `show`. v0.2 honors `accept` automatically (skill ships the report); `demote` is a no-op in v0.2 and lands as a real action in v0.3.
+**v0.4+ behavior — block-with-override.** When C1, C2, or C3 fires (and C7 doesn't override C1/C2), the skill **stops at Step 5.5** and runs prompt **P7** in `prompts.md`. The user picks:
 
-Self-check meta-findings render in the markdown report as a `## Self-check` section above the punch list (template already supports this).
+- `block` (default) — skill aborts, writes partial JSON to `tmp/rails-audit/report-YYYY-MM-DD-blocked.json`, does NOT render markdown. Re-run after fixing findings.
+- `demote` — skill auto-demotes (high → medium for C1; blocker → high for C2) until thresholds clear. Demoted findings get `self_check.status: "demoted"` with `notes` citing the check + original severity. Skill proceeds.
+- `accept` — skill prompts for a non-empty reason, records it in `audit.calibration_overrides[]`, proceeds.
+
+**C3 (unverified blocker) always blocks** with no `accept` option — an unverified blocker is hallucination risk and must be re-cited or removed.
+
+C4, C5, C6 remain warn-only — they're informational, not exploit-shaped.
+
+Self-check meta-findings render in the markdown report as a `## Self-check` section above the punch list.
 
 ### Step 5.7. Compute trend
 
@@ -257,12 +363,31 @@ Apply `output-template.md` to the JSON from Step 4 (now possibly mutated by Step
 
 ### Step 7 (was 6). Write outputs
 
-Save **both** files to `tmp/rails-audit/`:
+Save the structured JSON + rendered markdown to `tmp/rails-audit/`. Filename pattern: `report-YYYY-MM-DD`. Use today's actual date.
 
-- `report-YYYY-MM-DD.json` — the structured source of truth (use today's actual date)
-- `report-YYYY-MM-DD.md`   — the rendered view
+**Single-file mode** (default — when rendered markdown is < 30 KB):
 
-If a prior `report-*.json` exists in the same directory, populate `trend{}` in the new JSON before rendering (see PR#10 — finding-level diff by fingerprint).
+- `report-YYYY-MM-DD.json` — structured source of truth
+- `report-YYYY-MM-DD.md` — rendered view
+
+**Multi-file mode** (added v0.4 — when rendered markdown is ≥ 30 KB):
+
+- `report-YYYY-MM-DD.json` — structured source of truth (unchanged shape, single file)
+- `report-YYYY-MM-DD.md` — top-level index with anchor links to the three sub-files
+- `report-YYYY-MM-DD-summary.md` — executive summary, scorecards, fix sequence (the part stakeholders read)
+- `report-YYYY-MM-DD-findings.md` — full punch list with all findings (the part engineers read)
+- `report-YYYY-MM-DD-appendix.md` — tooling, coverage map, hotspots, ignored, cost (the audit-trail part)
+
+Force one mode with `--single-file` or `--multi-file`. Without a flag, the renderer measures the assembled markdown and chooses based on the 30 KB threshold.
+
+The top-level `report-YYYY-MM-DD.md` in multi-file mode includes:
+- The header (date / commit / mode / stack)
+- A table of contents with anchor links to the three sub-files
+- Executive summary inline (so stakeholders don't need to click)
+
+Sub-files inherit the same header so each is self-contained when read alone.
+
+If a prior `report-*.json` exists in the same directory, populate `trend{}` in the new JSON before rendering.
 
 ### Step 8 (was 7). Brief the user
 
