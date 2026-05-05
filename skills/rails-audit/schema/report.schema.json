@@ -286,6 +286,21 @@
               }
             }
           ]
+        },
+        "security_revalidation": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": { "enum": ["confirmed", "refined", "rejected", "promoted"] },
+                "notes":  { "type": "string" }
+              }
+            }
+          ],
+          "description": "Same shape as money_revalidation; populated by Step 4.6 (security revalidation). Added v0.4."
         }
       }
     },
