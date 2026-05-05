@@ -181,3 +181,13 @@ When tagging findings in this dimension, also consider these as `secondary_dimen
 | Loose third-party action pin | Medium |
 | Container running as root | Medium |
 | No `.dockerignore` or sloppy coverage | Low |
+
+## Reference points
+
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — `Dockerfile` is multi-stage with a digest-pinned base; production env vars enumerated in `.env.production.sample`.
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — `config/environments/production.rb` shows `force_ssl`, structured logging, and request-id discipline. Their Docker image build is well-documented.
+- **[`basecamp/kamal`](https://github.com/basecamp/kamal)** — reference for the Kamal deploy target. `examples/` directory shows `deploy.yml` patterns.
+- **[`heroku/heroku-buildpack-ruby`](https://github.com/heroku/heroku-buildpack-ruby)** — for projects deploying to Heroku.
+- **[Rails Foundation EOL schedule](https://endoflife.date/rails)** and **[Ruby EOL schedule](https://endoflife.date/ruby)** — single source of truth for foundation findings.
+
+_Verify cited paths on a recent commit; deploy targets evolve quickly._

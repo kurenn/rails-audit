@@ -150,3 +150,14 @@ When tagging findings in this dimension, also consider these as `secondary_dimen
 - A controller without a request spec is fine if it has thorough service-layer coverage of the same logic. Check the layer below before flagging.
 - `allow_any_instance_of` is sometimes the only sane option for legacy code; don't flag every instance, flag concentrations.
 - Low coverage on `app/admin/` (ActiveAdmin) is conventional and not a defect.
+
+## Reference points
+
+Real-world Rails projects worth studying for this dimension. Patterns, not commandments — verify against your stack.
+
+- **[`rspec/rspec-rails`](https://github.com/rspec/rspec-rails)** — the canonical RSpec-Rails project; its own `spec/` is a model of organization (per-layer subdirs, shared examples in `spec/support/`).
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — large Rails app with disciplined factory use, parallelized CI, and explicit time-freezing. Look at `spec/spec_helper.rb` for WebMock setup.
+- **[`thoughtbot/factory_bot_rails`](https://github.com/thoughtbot/factory_bot_rails)** — for non-cascading factory patterns.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — `spec/lib/` and `spec/services/` show service-layer coverage discipline.
+
+_Verify cited paths on a recent commit before relying — Rails project structure shifts._

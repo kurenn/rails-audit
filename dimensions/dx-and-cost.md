@@ -220,3 +220,14 @@ External API calls per request × requests/day = $/month. Stripe/Twilio especial
 | No table-size monitoring/archiving plan on tables >1M rows | Medium |
 | No PR template / CONTRIBUTING.md (team >3) | Low |
 | No ADR / decision log | Low |
+
+## Reference points
+
+- **[`thoughtbot/suspenders`](https://github.com/thoughtbot/suspenders)** — Rails template with opinionated `bin/setup` that actually works on a fresh checkout.
+- **[`gitlabhq/gitlabhq`](https://gitlab.com/gitlab-org/gitlab)** development docs — onboarding and dev-environment parity at scale.
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — `bin/docker_dev_env` and developer docs are well-maintained.
+- **[`evilmartians/anyway_config`](https://github.com/palkan/anyway_config)** — for env-config consistency between dev and prod.
+- **[`pagy`](https://github.com/ddnexus/pagy)** — fastest Ruby paginator; for projects with cost-sensitive list endpoints.
+- **[Cloud Run scaling docs](https://cloud.google.com/run/docs/about-instance-autoscaling)** — concurrency / min-instances / max-instances tradeoffs.
+
+_Rails `bin/setup` patterns vary widely; consider it a smell if the repo's hasn't been touched in >12 months._

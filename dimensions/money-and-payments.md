@@ -178,3 +178,13 @@ Money findings often touch multiple dimensions. Default secondary tags:
 | Currency conversion scattered (`* 100` everywhere) | Medium |
 | Money services at <50% coverage | Blocker |
 | `Money.from_cents(amount)` style (with money gem) | Good — flag if absent on multi-currency |
+
+## Reference points
+
+- **[`solidusio/solidus`](https://github.com/solidusio/solidus)** — `Spree::PaymentMethod` is the canonical Rails service-wrapper pattern for payments. Their state machines on `Order` / `Payment` are a clean model.
+- **[`stripe/stripe-ruby`](https://github.com/stripe/stripe-ruby)** — README documents idempotency keys, retry behavior, and timeout configuration.
+- **[Stripe docs on idempotency](https://stripe.com/docs/api/idempotent_requests)** — authoritative on key derivation patterns.
+- **[`RubyMoney/money-rails`](https://github.com/RubyMoney/money-rails)** — for the Decimal-vs-Float discipline; ActiveRecord integration.
+- **[`shopify/maintenance_tasks`](https://github.com/Shopify/maintenance_tasks)** — for safe data migrations on money-related schema changes.
+
+_Stripe API patterns evolve — always cross-reference against the current Stripe Ruby SDK version._

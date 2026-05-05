@@ -153,3 +153,13 @@ This is rarely visible in the repo; surface as "verify with user" unless IAM con
 | No data export endpoint (EU users) | Medium |
 | Overprivileged cloud service account | Medium |
 | No documented subprocessor list (B2B) | Low |
+
+## Reference points
+
+- **[`ankane/lockbox`](https://github.com/ankane/lockbox)** — application-layer encryption; cleaner API than `attr_encrypted`. README covers Rails 7 `encrypts` interop.
+- **[`paper-trail-gem/paper_trail`](https://github.com/paper-trail-gem/paper_trail)** — canonical audit log; supports per-model granularity and version diffs.
+- **[`palkan/audited`](https://github.com/collectiveidea/audited)** — alternative audit log; lighter weight than paper_trail for simple cases.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — has GDPR-compliant data export and account-deletion flows. See `app/services/account_deletion_service.rb` and `app/services/backup_service.rb` patterns.
+- **[Rails 7 ActiveRecord encryption guide](https://guides.rubyonrails.org/active_record_encryption.html)** — built-in option; works for most cases.
+
+_Compliance landscapes (GDPR, CCPA, HIPAA) shift; legal sign-off is required regardless of the technical pattern._

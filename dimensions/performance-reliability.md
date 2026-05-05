@@ -175,3 +175,14 @@ grep -E "worker_timeout|worker_boot_timeout" config/puma.rb
 | No CDN/asset_host | Medium |
 | Pool sized below `workers * threads` | High |
 | No graceful degradation path documented for critical external deps | Medium |
+
+## Reference points
+
+- **[`flyerhzm/bullet`](https://github.com/flyerhzm/bullet)** — N+1 detection; README shows dev/test config and CI integration.
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — their custom `Discourse::Cache` and MessageBus patterns are battle-tested for high-traffic Rails. Search for `cached` + `expires_in` patterns.
+- **[`bopm/stoplight`](https://github.com/bopm/stoplight)** — Ruby circuit-breaker library; README has Faraday integration recipes.
+- **[`Shopify/semian`](https://github.com/Shopify/semian)** — Shopify's bulkhead + circuit-breaker library. Production-grade for high-stakes external services.
+- **[`lostisland/faraday`](https://github.com/lostisland/faraday)** docs — timeouts, retries, middleware patterns.
+- **[`puma/puma`](https://github.com/puma/puma)** — `WORKER_TIMEOUT`, `worker_boot_timeout`, and pool-sizing rationale in the docs.
+
+_Verify against current versions — circuit-breaker and Puma APIs have shifted across major versions._
