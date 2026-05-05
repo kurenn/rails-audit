@@ -238,6 +238,19 @@ In **v0.2** these are warn-only: results land in `self_check.calibration.warning
 
 Self-check meta-findings render in the markdown report as a `## Self-check` section above the punch list (template already supports this).
 
+### Step 5.7. Compute trend
+
+If a prior `report-*.json` exists in `tmp/rails-audit/`, compute the per-finding diff per `dimensions/trend-tracking.md` and populate `trend{}` in the JSON before rendering.
+
+Algorithm:
+
+1. List `tmp/rails-audit/report-*.json` and pick the most recent file whose date is older than today.
+2. If none found, set `trend = null` and skip.
+3. If found but `schema_version` ≠ current, set `trend = null` and push to `audit.ignore_warnings[]` (`"Prior report at <path> has incompatible schema_version <N>; trend skipped."`).
+4. Otherwise compute `fixed_ids` / `new_ids` / `persisted_ids` by fingerprint set diff. Filter by `audit.scope` if the current run is scoped.
+5. Propagate `first_seen`: for persisted findings, copy from prior; for new findings, set to today.
+6. Mark persisted findings ≥ 30 days old as `stale` for the render layer (no schema field — it's a derived render flag).
+
 ### Step 6 (was 5). Render markdown
 
 Apply `output-template.md` to the JSON from Step 4 (now possibly mutated by Step 5.5). The template is authoritative — placeholder names refer to JSON paths. Filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`) are deterministic; same JSON in produces same markdown out.

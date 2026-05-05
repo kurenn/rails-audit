@@ -25,6 +25,14 @@ The renderer is Claude itself, applied during the skill's render step (Step 5 of
 | `sort_by severity` | findings array | sorted blocker → low |
 | `where severity=="X"` | findings array | filtered |
 | `count_where ...` | array | integer count |
+| `filter_by_dimension <dim>` | id array | ids whose finding has the dim in primary OR secondary |
+| `filter_stale_30d` | id array | persisted ids whose `first_seen` is ≥30 days old |
+| `resolve_findings` | id array | finding objects (current run) |
+| `resolve_findings_in <doc>` | id array | finding objects from a different doc (e.g. `prior`) |
+| `sort_by_severity` | findings array | blocker → low |
+| `delta_from_prior_dimension <dim>` | scorecard | numeric delta from prior report's same-dim score, prefixed `+` or `-` |
+| `days_since` | date string | integer days |
+| `upper` | string | uppercase |
 
 ## Empty states
 
@@ -179,11 +187,38 @@ Score guide: 0–3 unsafe / 4–6 risky / 7–8 acceptable / 9–10 strong.
 | New | {{trend.new_ids | count}} |
 | Persisted | {{trend.persisted_ids | count}} |
 
+### Per-dimension diff
+
+| Dimension | Fixed | New | Persisted | Score Δ |
+|---|---|---|---|---|
+{{#each scorecards}}
+| {{dimension | dimension_label}} | {{trend.fixed_ids | filter_by_dimension dimension | count}} | {{trend.new_ids | filter_by_dimension dimension | count}} | {{trend.persisted_ids | filter_by_dimension dimension | count}} | {{score | delta_from_prior_dimension dimension}} |
+{{/each}}
+
 {{#if trend.fixed_ids}}
-**Fixed**: {{trend.fixed_ids | each_resolve_title | join ", "}}
+### Top fixed (by severity)
+
+{{#each trend.fixed_ids | resolve_findings_in prior | sort_by_severity | slice 0 5}}
+- **{{severity | upper}}** — {{title}} (`{{location.file}}{{#if location.line}}:{{location.line}}{{/if}}`)
+{{/each}}
 {{/if}}
+
 {{#if trend.new_ids}}
-**New**: {{trend.new_ids | each_resolve_title | join ", "}}
+### Top new (by severity)
+
+{{#each trend.new_ids | resolve_findings | sort_by_severity | slice 0 5}}
+- **{{severity | upper}}** — {{title}} (`{{location.file}}{{#if location.line}}:{{location.line}}{{/if}}`)
+{{/each}}
+{{/if}}
+
+{{#if trend.persisted_ids | filter_stale_30d}}
+> **Stale persisted** ({{trend.persisted_ids | filter_stale_30d | count}}): findings present for ≥30 days without being fixed or acknowledged.
+
+| ID | Title | Severity | First seen | Days |
+|---|---|---|---|---|
+{{#each trend.persisted_ids | filter_stale_30d | resolve_findings | sort_by first_seen}}
+| `{{id}}` | {{title}} | {{severity}} | {{first_seen}} | {{first_seen | days_since}} |
+{{/each}}
 {{/if}}
 
 ---
