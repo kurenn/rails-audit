@@ -13,7 +13,7 @@ Run a structured stability audit of a Ruby on Rails codebase and produce a singl
 - `--standard` (default) — full audit with parallel subagents. ~10–15 min.
 - `--deep` — standard + boots app, runs subset of specs, mutation testing on critical paths. ~30+ min.
 
-If the user invokes `/rails-audit` with no mode, ask once: "Quick (3min, static only), Standard (15min, default), or Deep (30min+, runs specs)?" — then proceed.
+If the user invokes `/rails-audit` with no mode, ask using prompt **P1** in `prompts.md` — then proceed.
 
 ## Workflow
 
@@ -23,28 +23,19 @@ The audit's value is bounded by which static tools are available. **Before fanni
 
 1. Detect what's installed (see `tooling.md` for the contract).
 
-2. **If any Tier-1 (required) tool is missing**, stop and ask the user with a copy-pasteable Gemfile snippet:
+2. **If any Tier-1 (required) tool is missing**, ask per missing tool using prompt **P2** in `prompts.md`. The prompt's three answers (`gemfile` / `global` / `skip`) each have well-defined behavior and a fallback.
 
-   > "These required tools are missing: `<list>`. Without them, the audit cannot produce reliable findings on `<dimensions>`.
-   > I can add them to your `Gemfile` (recommended — version-locked) or install globally (faster but unpinned). Which would you prefer? [`gemfile` / `global` / `skip`]"
-
-   - `gemfile` → use the `Edit` tool to append the appropriate `group :development[, :test]` entries, then run `bundle install`. Verify with a per-tool `--version` check. Commit the Gemfile change is **not** the skill's job — leave it staged or let the user commit.
-   - `global` → run `gem install <tool>` for each. Note in the report that versions are unpinned.
-   - `skip` → proceed with degraded confidence. The tooling appendix in the report must list each skipped tool and which dimensions it would have strengthened.
-
-3. **For Tier-2 (recommended) tools**, ask once with a single batch prompt:
-
-   > "Recommended tools missing: `<list>`. Add them now? [`y` / `n`]"
-
-   `y` → batch-edit Gemfile and `bundle install`. `n` → proceed; missing tools noted in appendix.
+3. **For Tier-2 (recommended) tools**, ask once using prompt **P3** in `prompts.md`.
 
 4. **Tier-3 (optional / deep-mode) tools** are *only* prompted in `--deep` mode, and are always opt-in.
 
-5. **Hard floor**: if the project declines all of `{rubocop, brakeman, simplecov}`, abort the audit. Without at least these three, the synthesis has nothing reliable to synthesize. Suggest installing them globally as the lowest-friction path and re-running.
+5. **Hard floor**: if the project declines all of `{rubocop, brakeman, simplecov}`, abort the audit (P2's hard-floor branch handles this).
 
 6. **Don't auto-add** anything without explicit consent. The Gemfile is the user's source of truth — modifying it silently is out of scope.
 
 7. **Cache provisioning state**: write `tmp/rails-audit/tools-detected.json` so subsequent runs can fast-path. Re-detect on `--quick` only if the cache is older than 7 days.
+
+8. **First-run profile init**: if `.claude/rails-audit.yml` doesn't exist and the skill auto-detected stack values, ask using prompt **P4** in `prompts.md`. Skip this step on subsequent runs.
 
 A reusable Gemfile snippet for the user to paste manually if they prefer is documented in `tooling.md` under "Recommended Gemfile additions".
 
@@ -163,6 +154,7 @@ ignore_paths:                    # excluded from smell/coverage checks
 
 - `rubric.md` — severity definitions and calibration examples
 - `tooling.md` — tool contract, detection, and invocation patterns
+- `prompts.md` — every user-facing question (P1–P7) with answers, defaults, and fallbacks
 - `schema/report.schema.json` — **JSON Schema (draft 2020-12) for the report** — the contract; everything else is a view
 - `output-template.md` — markdown render template applied to the JSON
 - `dimensions/` — per-dimension check lists, one file per cluster

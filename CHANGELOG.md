@@ -20,6 +20,19 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#3 — Formalize interactive prompts)
+
+- **`prompts.md`** — every user-facing question in the skill (P1–P7) documented in one file with question text, accepted answers + aliases, default, fallback, and side-effects.
+  - **P1** Mode selection (Quick/Standard/Deep)
+  - **P2** Tool provisioning per missing required tool (gemfile/global/skip + hard floor)
+  - **P3** Recommended tool batch
+  - **P4** Project profile init (first run only)
+  - **P5** Pre-fan-out budget confirmation (when budget unset and estimate >30K tokens)
+  - **P6** Ignore-finding reason (free-form, with 90-day default expiry)
+  - **P7** Self-check warning surfaced to user (show/demote/accept)
+- **`SKILL.md`** updated to reference prompts by ID (P1–P4) instead of inlining prompt text. Future PRs will reference P5–P7 as the relevant features land.
+- Anti-patterns section in `prompts.md` codifies what to avoid: open-ended without default, stacked questions, hidden side effects, unbounded retries.
+
 ### Added (v0.2 PR#2 — Cross-dimension finding tags)
 
 - **`## Cross-cuts` section** added to all 12 dimension files (`spec-and-coverage`, `deploy-ci`, `security-and-authz`, `money-and-payments`, `code-health`, `performance-reliability`, `background-jobs`, `observability`, `data-integrity`, `data-governance`, `dx-and-cost`, `domain-shape`). Each section documents the dimension's known overlaps so synthesis can populate `secondary_dimensions[]` consistently.
