@@ -20,6 +20,15 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 - Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
 
+### Added (v0.2 PR#10 — Trend with finding-level diffs)
+
+- **`dimensions/trend-tracking.md`** — full spec for finding-level diff: source selection (most recent prior `report-*.json`), fingerprint set diff (fixed / new / persisted), `first_seen` propagation, scope-aware filtering, and ≥30-day "stale persisted" surfacing.
+- **`SKILL.md`** new **Step 5.7** (between self-check and render): compute trend, populate `trend{}` in JSON. Schema-version mismatch with prior report (e.g., a v0.1 report) → `trend = null` and a warning in `audit.ignore_warnings[]`.
+- **`output-template.md`** expanded Trend section: per-dimension diff table with score Δ, top-5 fixed and top-5 new findings (sorted blocker → low), and a stale-persisted sub-table for findings ≥30 days old.
+- New filters in template: `filter_by_dimension`, `filter_stale_30d`, `resolve_findings`, `resolve_findings_in`, `sort_by_severity`, `delta_from_prior_dimension`, `days_since`, `upper`.
+- Empty trend (first run) is omitted entirely from the markdown — no "no prior report" placeholder.
+- Schema `trend{}` already supported these fields from PR#1; no schema change.
+
 ### Added (v0.2 PR#9 — Token-budget awareness)
 
 - **`dimensions/cost-estimation.md`** — token-cost heuristic with worked examples. Pre-flight estimate based on mode multiplier × (base + per-dimension constant + per-KLOC constant for `app/`). Calibrated to ~30% MAPE on standard-mode runs of typical Rails projects (~10K–50K LOC).
