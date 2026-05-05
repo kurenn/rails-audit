@@ -4,116 +4,41 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
-### Added (v0.2 PR#1 — Schema + JSON-first synthesis)
+## [0.2.0] — 2026-05-05
 
-- **`schema/report.schema.json`** — JSON Schema (draft 2020-12) defining the report contract. Mandatory fields: `schema_version` (=2), `skill_version`, `audit{}`, `summary{}`, `scorecards[]`, `findings[]`, `tooling{}`. Optional: `ignored_findings[]`, `trend{}`, `self_check{}`, `cost{}`, `fix_sequence[]`, `appendices{}`.
-- **`examples/sample-report.json`** — the influapp dogfood report rendered into the new schema (25 findings, 18 scorecards, 5 phases). Validates against the schema.
-- Stable finding fingerprints: `f-` + first 16 hex of `SHA256(primary_dimension + file_path + finding_type + normalize(evidence_snippet))`. `normalize` strips comments, collapses whitespace, preserves case.
+Major refinement informed by the v0.1 dogfood against influapp-api. JSON becomes the source of truth for reports; markdown is rendered from it. The skill now polices its own output (self-check), supports finding-level trend tracking, scoped audits, and acknowledged-finding suppression. 11 PRs across 4 phases.
+
+### Added
+
+- **JSON-first synthesis** — `schema/report.schema.json` is the contract; `output-template.md` is a render. Stable finding fingerprints (`SHA256(primary_dimension + file_path + finding_type + normalize(evidence_snippet))`). [#13]
+- **Cross-dimension finding tags** — `secondary_dimensions[]` populated by synthesis; per-dimension scorecards count findings where the dimension appears in `primary_dimension` OR `secondary_dimensions[]`. Each `dimensions/*.md` documents its known cross-cuts. [#14]
+- **`prompts.md`** — every user-facing question (P1–P7) documented with answers, defaults, and fallbacks. [#15]
+- **`bin/check-tools`** — standalone Ruby script (no gem deps) inventorying audit tooling. Modes: human-readable, `--json`, `--required-only` (CI exit code), `--help`. [#16]
+- **Audit-the-audit self-check (Step 5.5)** — five checks (severity inflation, blocker over-use, unverified blocker, phase dependency mismatch, scorecard mismatch). Warn-only in v0.2; hardens to block in v0.3. [#17]
+- **Money-path re-validation pass (Step 4.5)** — focused second pass on every money-tagged finding. Six checks (M-RV-1 idempotency-key derivation, M-RV-2 transaction-boundary ordering, M-RV-3 webhook event-ID dedup, M-RV-4 money column types, M-RV-5 refund idempotency, M-RV-6 audit trail). Statuses: `confirmed` / `refined` / `rejected` / `promoted`. [#18]
+- **`.audit-ignore.yml`** — fingerprint-keyed suppression of acknowledged findings. Required: `id`, `reason`. Optional: `acknowledged_by`, `expires_at`. Stale ignores surface in `audit.ignore_warnings[]`; expired ignores re-surface with a marker. Applied at Step 4.4. [#19]
+- **`--only` / `--exclude` scoped audits** — narrow an audit to specific dimensions or aliases. 17 aliases (`money`, `security`, `auth`, `deploy`, `specs`, `coverage`, `perf`, `code`, `jobs`, `obs`, `data`, `dx`, `cost`, etc.). Mutually exclusive with each other; Levenshtein-suggested correction on typos. [#20]
+- **Token-budget awareness (Step 0.5)** — pre-flight estimate (`mode_mult * (5000 + 2000*dims + 200*kloc_app)` for input, `* (3000 + 600*dims + 10*kloc_app)` for output). Prompt P5 fires above 30K input. `--budget=<N>` enforces a cap with partial-report fallback. [#21]
+- **Finding-level trend (Step 5.7)** — replaces v0.1's score-deltas with per-finding diff: fixed / new / persisted, with first-seen propagation. Per-dimension diff table. Stale-persisted sub-table for findings ≥30 days old. Empty trend (first run) is omitted entirely. [#22]
+- **Reference points per dimension** — each of the 12 primary dimension files closes with a `## Reference points` section citing 3–6 OSS Rails projects, gems, or official docs (Solidus, Discourse, Mastodon, GitLab, Rails Security Guide, strong_migrations, lockbox, Suspenders, etc.). [#23]
+- New supporting dimension files: `dimensions/self-check.md`, `dimensions/money-revalidation.md`, `dimensions/cost-estimation.md`, `dimensions/trend-tracking.md`.
 
 ### Changed
 
-- **`SKILL.md`** — Step 4 (synthesize) now produces JSON conforming to `schema/report.schema.json`. New Step 5 renders markdown from the JSON via `output-template.md`. New Step 6 writes both `.json` and `.md` to `tmp/rails-audit/`.
-- **`output-template.md`** — refactored from free-form prose into a JSON-driven render template. Placeholder names (`{{json.path}}`) refer to JSON paths. Filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`) are deterministic.
-- **`examples/sample-report.md`** — regenerated as the rendered output of `sample-report.json`. Notes at the top: edits should land in the JSON or the template, not directly in this file.
+- **`SKILL.md`** — workflow expanded from 7 to 11 steps: Step 0 (provision) + 0.5 (estimate) + 1 (detect) + 2 (static tools) + 3 (fan-out) + 4 (synthesize → JSON) + 4.4 (apply ignore) + 4.5 (money revalidate) + 5.5 (self-check) + 5.7 (trend) + 6 (render) + 7 (write) + 8 (brief).
+- **`output-template.md`** — refactored from prose into a JSON-driven render template with named filters (`date`, `dimension_label`, `range_str`, `percent`, `join`, `where`, `sort_by`, plus 8 trend-specific filters added in [#22]).
+- **`examples/sample-report.{json,md}`** — regenerated to demonstrate every v0.2 feature: cross-dimension tags, money revalidation (`confirmed`/`refined`/`promoted` examples), an ignored finding, a stale-ignore warning, self-check calibration warnings, and an unverified blocker.
 
-### Migration
+### Migration from v0.1
 
-- Reports written by v0.1 of the skill are markdown-only; they don't carry fingerprints. Trend tracking (planned PR#10) will only work between v0.2+ JSON reports.
+- Reports written by v0.1 are markdown-only; they don't carry fingerprints. Trend tracking only works between v0.2+ JSON reports.
+- The Gemfile additions in v0.1 (Step 0 provisioning) are still recommended; v0.2 doesn't change which tools are needed, only how the skill orchestrates them.
 
-### Added (v0.2 PR#11 — Reference points per dimension)
+### Locked-in design decisions (recorded for future-self)
 
-- **`## Reference points`** section appended to all 12 primary dimension files. Each cites 3–6 OSS Rails projects, gems, or official docs worth studying for that dimension's patterns. Examples:
-  - `money-and-payments`: Solidus' `Spree::PaymentMethod`, Stripe Ruby SDK, Stripe idempotency docs, money-rails, Shopify maintenance_tasks.
-  - `security-and-authz`: Rails Security Guide, Pundit, rack-attack, Devise, Brakeman warnings doc.
-  - `deploy-and-ci`: Mastodon Dockerfile, Discourse production.rb, Kamal examples, Heroku buildpack-ruby, EOL schedules.
-  - `data-integrity`: strong_migrations, GitLab database docs, AASM, Rails ActiveRecord migrations guide.
-- Each reference is caveat'd: "patterns, not commandments — verify against your stack." Callouts at the end of each section flag known points of API drift (Sentry `before_send`, Stripe API version, RuboCop config evolution).
-- **Verification model**: references are point-in-time at the moment of writing. Each release re-verifies the cited paths. Open issues tracking link rot will be auto-generated by a future CI job (v0.3+).
-
-### Added (v0.2 PR#10 — Trend with finding-level diffs)
-
-- **`dimensions/trend-tracking.md`** — full spec for finding-level diff: source selection (most recent prior `report-*.json`), fingerprint set diff (fixed / new / persisted), `first_seen` propagation, scope-aware filtering, and ≥30-day "stale persisted" surfacing.
-- **`SKILL.md`** new **Step 5.7** (between self-check and render): compute trend, populate `trend{}` in JSON. Schema-version mismatch with prior report (e.g., a v0.1 report) → `trend = null` and a warning in `audit.ignore_warnings[]`.
-- **`output-template.md`** expanded Trend section: per-dimension diff table with score Δ, top-5 fixed and top-5 new findings (sorted blocker → low), and a stale-persisted sub-table for findings ≥30 days old.
-- New filters in template: `filter_by_dimension`, `filter_stale_30d`, `resolve_findings`, `resolve_findings_in`, `sort_by_severity`, `delta_from_prior_dimension`, `days_since`, `upper`.
-- Empty trend (first run) is omitted entirely from the markdown — no "no prior report" placeholder.
-- Schema `trend{}` already supported these fields from PR#1; no schema change.
-
-### Added (v0.2 PR#9 — Token-budget awareness)
-
-- **`dimensions/cost-estimation.md`** — token-cost heuristic with worked examples. Pre-flight estimate based on mode multiplier × (base + per-dimension constant + per-KLOC constant for `app/`). Calibrated to ~30% MAPE on standard-mode runs of typical Rails projects (~10K–50K LOC).
-- **`SKILL.md`** new **Step 0.5** between provisioning and detect: compute estimate; trigger prompt **P5** if `--budget` is unset and estimated input > 30K tokens.
-- **`--budget=<N>`** flag enforced: each agent call is gated on remaining budget; budget hit saves partial JSON + flagged-partial markdown rather than silently truncating.
-- **Hard floor**: `--budget=<N>` where N < 5000 is rejected.
-- Schema `cost{}` and template Appendix E already supported these fields from PR#1; this PR populates them.
-
-### Added (v0.2 PR#8 — `--only` / `--exclude` scoped audits)
-
-- **`--only=<comma-list>`** — run only the named dimensions or aliases. Example: `/rails-audit --only=money,security`.
-- **`--exclude=<comma-list>`** — run everything except the named dimensions/aliases.
-- **Positional shortcut** — a single non-flag arg is treated as `--only=<arg>`: `/rails-audit money`.
-- **Aliases** (case-insensitive): `money` → `money-and-payments`, `security` → `security-and-authz`, `auth`/`authz` → `authorization`, `deploy`/`ci` → `deploy-and-ci`, `specs` → `spec-stability`, `coverage` → `test-coverage`, `perf` → `performance` + `reliability`, `code` → `code-smells` + `risk-hotspots`, `jobs` → `background-jobs`, `obs` → `observability`, `data` → `data-integrity` + `data-governance`, `dx` → `developer-experience`, `cost` → `cost-and-scaling`, `all` → all 18.
-- **Validation**: unknown dimension/alias rejected with a Levenshtein-suggested correction; `--only` and `--exclude` are mutually exclusive.
-- **Behavior**: scoped audits skip cluster fan-out for irrelevant clusters, filter scorecards and findings to in-scope dimensions (including findings whose `secondary_dimensions[]` overlap), renumber the scorecard table from 1, and gate Step 4.5 (money revalidation) on scope membership.
-
-### Added (v0.2 PR#7 — `.audit-ignore.yml` suppression mechanism)
-
-- **`.audit-ignore.yml`** at repo root suppresses acknowledged findings by fingerprint. Each entry: `id` (required), `reason` (required, non-empty), `acknowledged_by` (optional), `expires_at` (optional ISO date).
-- **`SKILL.md`** new **Step 4.4** between synthesis and money re-validation:
-  - Sets `findings[<id>].ignored = true` for matching entries.
-  - Builds top-level `ignored_findings[]` array.
-  - Surfaces stale ignores (no current finding matches) in `audit.ignore_warnings[]`.
-  - Re-surfaces expired ignores with a `_(ignore expired YYYY-MM-DD)_` note.
-- Findings with `ignored: true` are excluded from punch list, money re-validation, and self-check calibration percentages — but **included** in trend tracking (so an ignored finding still counts as "persisted" if it was in the prior report).
-- **`examples/.audit-ignore.yml.example`** documents the format with three illustrative entries: live, permanent (no expiry), and expired.
-- **`examples/sample-report.json`**: M4 (No bullet gem) marked `ignored: true` with a corresponding `ignored_findings[]` entry; one stale-ignore (`f-deadbeefdeadbeef`) demonstrates the warning path.
-- **`examples/sample-report.md`**: regenerated. Mediums table renumbered (M5 → M4 since old M4 is suppressed); Phase 4 fix sequence drops the suppressed item; Appendix D — Ignored findings populated.
-- Schema and template already supported `ignored_findings[]` and `audit.ignore_warnings[]` from PR#1; no schema or template change.
-
-### Added (v0.2 PR#6 — Money-path re-validation pass)
-
-- **`dimensions/money-revalidation.md`** — defines the focused second pass on every finding tagged `money-and-payments` (primary OR secondary). Six money-specific re-checks: M-RV-1 idempotency-key derivation, M-RV-2 transaction boundary ordering, M-RV-3 webhook event-ID dedup, M-RV-4 money column types (Float = blocker), M-RV-5 refund/reversal idempotency, M-RV-6 audit-trail completeness.
-- **`SKILL.md`** new **Step 4.5** between synthesis and self-check. Sets `findings[<id>].money_revalidation` to `confirmed` / `refined` / `rejected` / `promoted`. Includes a proactive sweep on `app/services/payments/*`, `app/controllers/webhooks/stripe_*`, `app/jobs/*payment*`, `app/jobs/*payout*`, and money-shaped columns in `db/schema.rb`.
-- **`examples/sample-report.json`** — three findings now exercise the field: `confirmed` (webhook dedup), `refined` (update_column on stripe_customer_id), `promoted` (Stripe payouts missing idempotency keys, originally tagged medium).
-- **`examples/sample-report.md`** — regenerated to show the `_Re-validated: <status>_` badges.
-- Schema and template already supported `money_revalidation` from PR#1; no schema or template change needed.
-
-### Added (v0.2 PR#5 — Audit-the-audit self-check)
-
-- **`dimensions/self-check.md`** — defines five calibration checks the skill runs against its own report before delivery: C1 severity inflation (>40% high), C2 blocker over-use (>25% blocker), C3 unverified blocker (cited line not `sed`-confirmed), C4 phase dependency mismatch, C5 scorecard ↔ finding-count mismatch.
-- **`SKILL.md`** new Step 5.5 (between synthesis and render). Runs the five checks; surfaces results in `self_check.calibration.warnings[]` and per-finding `self_check.status`.
-- **In v0.2 self-check is warn-only.** No findings are removed or demoted. Hardening to block is planned for v0.3 once thresholds are calibrated against ~5 real audits.
-- Step numbering shifted downstream: render is now Step 6, write Step 7, brief Step 8.
-
-### Added (v0.2 PR#4 — `bin/check-tools` standalone command)
-
-- **`bin/check-tools`** — Ruby script that inventories rails-audit tooling in any Rails project.
-  - No args: human-readable tier-grouped table with Tool / Status / Version / Install hint.
-  - `--json`: machine-readable output matching the `tooling{}` block of `report.schema.json` (so it can be reused inside an audit run).
-  - `--required-only`: exits 1 if any Tier-1 tool is missing — useful as a CI pre-flight.
-  - `--help`: usage.
-- Reads `tooling.md` to extract tier definitions; only parses Tier 1–3 (Tier 4 is operational, not gems).
-- ANSI-strip + sanity-check on tool `--version` output to avoid showing error messages as version strings.
-- README documents the command.
-
-### Added (v0.2 PR#3 — Formalize interactive prompts)
-
-- **`prompts.md`** — every user-facing question in the skill (P1–P7) documented in one file with question text, accepted answers + aliases, default, fallback, and side-effects.
-  - **P1** Mode selection (Quick/Standard/Deep)
-  - **P2** Tool provisioning per missing required tool (gemfile/global/skip + hard floor)
-  - **P3** Recommended tool batch
-  - **P4** Project profile init (first run only)
-  - **P5** Pre-fan-out budget confirmation (when budget unset and estimate >30K tokens)
-  - **P6** Ignore-finding reason (free-form, with 90-day default expiry)
-  - **P7** Self-check warning surfaced to user (show/demote/accept)
-- **`SKILL.md`** updated to reference prompts by ID (P1–P4) instead of inlining prompt text. Future PRs will reference P5–P7 as the relevant features land.
-- Anti-patterns section in `prompts.md` codifies what to avoid: open-ended without default, stacked questions, hidden side effects, unbounded retries.
-
-### Added (v0.2 PR#2 — Cross-dimension finding tags)
-
-- **`## Cross-cuts` section** added to all 12 dimension files (`spec-and-coverage`, `deploy-ci`, `security-and-authz`, `money-and-payments`, `code-health`, `performance-reliability`, `background-jobs`, `observability`, `data-integrity`, `data-governance`, `dx-and-cost`, `domain-shape`). Each section documents the dimension's known overlaps so synthesis can populate `secondary_dimensions[]` consistently.
-- **`SKILL.md` Step 4** updated with explicit instructions for tagging cross-dimensional findings: pick the most-load-bearing dimension as primary, tag all applicable others in `secondary_dimensions[]`. Concrete examples (`update_column(:stripe_customer_id)`, Stripe webhook missing event-ID dedup, `force_ssl` disabled).
-- Per-dimension scorecards now meaningfully aggregate findings where the dimension appears in `primary_dimension` OR any `secondary_dimensions[]`.
+- **Fingerprint algorithm**: stable across line moves + whitespace; unstable across renames + material code changes. Renames intentionally produce "fixed + new" in trend.
+- **JSON-first**: schema is the contract; markdown is one of potentially several views.
+- **Self-check warns, doesn't block (v0.2)**: hardens to block in v0.3 once thresholds are calibrated against ~5 real audits.
 
 ## [0.1.0] — 2026-05-04
 
@@ -147,5 +72,6 @@ Initial release.
 - Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
 - Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
 
-[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.1.0
