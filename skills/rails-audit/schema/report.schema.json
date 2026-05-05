@@ -169,6 +169,21 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Stale ignore entries that match no current finding."
+        },
+        "calibration_overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check_id", "override_reason", "override_at"],
+            "properties": {
+              "check_id":        { "enum": ["C1", "C2"] },
+              "override_reason": { "type": "string", "minLength": 1 },
+              "override_at":     { "type": "string", "format": "date-time" },
+              "override_by":     { "type": "string" }
+            }
+          },
+          "description": "User-recorded overrides when self-check P7 is answered with `accept`. Added v0.4."
         }
       }
     },
