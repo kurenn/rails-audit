@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/parse-reek — read reek -f json output and emit aggregate stats.
+#
+# Usage:
+#   bin/parse-reek                          # read default path; emit JSON aggregate
+#   bin/parse-reek <path>
+#   bin/parse-reek --table                  # human-readable
+#   bin/parse-reek --help
+#
+# Like parse-rubocop: aggregate-only output into appendices.code_smells.
+# Reek's per-smell output is too noisy to surface as findings.
+
+require 'json'
+
+DEFAULT_PATH = 'tmp/rails-audit/reek.json'
+
+def aggregate(json)
+  smells = json.is_a?(Array) ? json : json['smells'] || []
+  total = smells.size
+  by_smell = Hash.new(0)
+  by_file  = Hash.new(0)
+  smells.each do |s|
+    by_smell[s['smell_type'] || 'Unknown'] += 1
+    by_file[s['source']         || 'unknown'] += 1
+  end
+  top_smells = by_smell.sort_by { |_k, v| -v }.first(10).map { |k, v| { type: k, count: v } }
+  top_files  = by_file.sort_by  { |_k, v| -v }.first(5).map  { |k, v| { file: k, count: v } }
+  {
+    total: total,
+    by_smell_type: by_smell,
+    top_smells: top_smells,
+    top_files: top_files
+  }
+end
+
+def render_table(agg)
+  puts "Reek aggregate (#{agg[:total]} smells)"
+  puts '---'
+  puts 'Top smell types:'
+  agg[:top_smells].each { |s| puts "  #{s[:count].to_s.rjust(4)}  #{s[:type]}" }
+  puts ''
+  puts 'Top affected files:'
+  agg[:top_files].each { |f| puts "  #{f[:count].to_s.rjust(4)}  #{f[:file]}" }
+end
+
+def main(argv)
+  return puts(File.foreach(__FILE__).take(13).map { |l| l.sub(/^#\s?/, '') }.join) if argv.include?('--help') || argv.include?('-h')
+
+  table_mode = argv.delete('--table')
+  path = argv.first || DEFAULT_PATH
+
+  unless File.exist?(path)
+    warn "reek output not found at #{path}. Run: reek -f json . > #{path}"
+    exit 2
+  end
+
+  json = JSON.parse(File.read(path))
+  agg = aggregate(json)
+
+  if table_mode
+    render_table(agg)
+  else
+    puts JSON.pretty_generate(agg)
+  end
+end
+
+main(ARGV.dup) if __FILE__ == $PROGRAM_NAME
