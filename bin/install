@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Install rails-audit as a Claude Code skill.
+#
+# Usage:
+#   bin/install              # symlink into ~/.claude/skills/rails-audit
+#   bin/install --copy       # copy instead of symlink (for read-only checkouts)
+#   bin/install --project    # install into ./.claude/skills/rails-audit (project-scoped)
+#
+# Re-run safely; existing installs are replaced.
+
+set -euo pipefail
+
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODE="symlink"
+SCOPE="user"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --copy) MODE="copy" ;;
+    --project) SCOPE="project" ;;
+    -h|--help)
+      head -n 9 "$0" | tail -n 8 | sed 's/^# \?//'
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+case "$SCOPE" in
+  user)    TARGET_DIR="${HOME}/.claude/skills/rails-audit" ;;
+  project) TARGET_DIR="$(pwd)/.claude/skills/rails-audit" ;;
+esac
+
+mkdir -p "$(dirname "$TARGET_DIR")"
+
+if [ -e "$TARGET_DIR" ] || [ -L "$TARGET_DIR" ]; then
+  echo "Removing existing $TARGET_DIR"
+  rm -rf "$TARGET_DIR"
+fi
+
+case "$MODE" in
+  symlink)
+    ln -s "$SOURCE_DIR" "$TARGET_DIR"
+    echo "Symlinked: $TARGET_DIR -> $SOURCE_DIR"
+    ;;
+  copy)
+    cp -R "$SOURCE_DIR" "$TARGET_DIR"
+    rm -rf "$TARGET_DIR/.git"
+    echo "Copied to: $TARGET_DIR"
+    ;;
+esac
+
+echo
+echo "Installed. Restart Claude Code, then invoke with /rails-audit"

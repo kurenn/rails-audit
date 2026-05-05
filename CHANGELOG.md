@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to this skill are documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] — 2026-05-04
+
+Initial release.
+
+### Added
+
+- **`SKILL.md`** — entry point with three modes (`--quick`, `--standard`, `--deep`), a 6-step workflow plus Step 0 for tooling provisioning, and a project-profile mechanism (`.claude/rails-audit.yml`) for per-project overrides.
+- **`rubric.md`** — strict 4-tier severity rubric (Blocker / High / Medium / Low) with explicit calibration examples and anti-patterns.
+- **`tooling.md`** — tool contract (Tier 1 required, Tier 2 recommended, Tier 3 optional), provisioning policy, copy-pasteable Gemfile snippet, and adapter detection (job adapter, auth strategy, deploy target).
+- **`output-template.md`** — exact report skeleton with executive summary, per-dimension scorecards, severity-grouped punch list, recommended fix sequence, and trend table.
+- **`dimensions/`** — 12 cluster files covering 18 dimensions:
+  - `domain-shape.md`
+  - `spec-and-coverage.md`
+  - `deploy-ci.md`
+  - `security-and-authz.md`
+  - `money-and-payments.md`
+  - `code-health.md`
+  - `performance-reliability.md`
+  - `background-jobs.md`
+  - `observability.md`
+  - `data-integrity.md`
+  - `data-governance.md`
+  - `dx-and-cost.md`
+- **`examples/sample-report.md`** — illustrative report based on a real audit.
+- **`README.md`** — installation and usage; **`LICENSE`** — MIT.
+
+### Workflow
+
+- 4-cluster parallel agent fan-out (Spec/Coverage, Deploy/CI/Obs, Code Health, Security/Money) for `--standard` mode.
+- Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
+- Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
+
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.1.0
