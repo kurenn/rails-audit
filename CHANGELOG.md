@@ -4,6 +4,15 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.3 milestone PR#3 — Re-run modes: --continue and --from-findings)
+
+- **`--continue`** — load most recent `report-*.json` in `tmp/rails-audit/`; re-run only Step 1.5 (secrets scan) + Steps 4.4 onward (ignores, revalidations, self-check, trend, render). Skips detect + agent fan-out. ~5K tokens vs ~50K for a fresh standard audit.
+- **`--from-findings=<path>`** — same shape but loads from an explicit JSON path (hand-edited or copied from another run). Useful for what-if analysis.
+- Schema update: `audit.mode` enum extended with `"continue"` and `"from-findings"` (additive, backwards-compatible).
+- Behavior documented in `SKILL.md` "Re-run modes" section: skip Steps 1–3, run secrets scan + Steps 4.4 onward, link trend chain via the loaded report's prior_report_path.
+- Hard rules: mutually exclusive with each other and with the initial-audit modes; schema_version of loaded report must match current.
+- Closes #32.
+
 ### Added (v0.3 milestone PR#2 — Tracked-secrets scanner: bin/scan-secrets + Step 1.5)
 
 - **`bin/scan-secrets`** — Ruby script (stdlib only) enumerating `git ls-files` and matching against secret-shaped filename patterns. Emits human-readable table by default; `--json` for machine-readable; `--strict` for CI exit-code mode.

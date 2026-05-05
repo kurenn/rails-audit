@@ -78,6 +78,45 @@ When scope is narrower than `all`:
 
 7. **Trend (Step 7)** compares only the scoped slice of findings against the prior report's matching slice.
 
+## Re-run modes (added v0.3)
+
+Beyond the initial-audit modes (Quick / Standard / Deep), the skill supports two **re-run** modes that skip detect + agent fan-out and re-use prior findings.
+
+- **`--continue`** — load the most recent `report-*.json` in `tmp/rails-audit/` and re-run only Steps 4.4 onward (apply ignores, money-revalidation, security-revalidation, self-check, trend, render). Skip Steps 1–3 entirely. Useful after fixing N findings and wanting fresh self-check + trend data without rerunning the full ~50K-token agent fan-out.
+
+- **`--from-findings=<path>`** — load findings from a specific JSON file (could be hand-edited or copied from another run). Re-run pipeline from Step 4.4 against that input. Useful for what-if analysis or for surfacing a different prior baseline.
+
+### Behavior
+
+When `--continue` or `--from-findings` is set:
+
+1. **Skip Step 1 (Detect)**, but copy `audit.stack`, `audit.commit`, `audit.branch` from the loaded report — re-detected only if `--re-detect` is also set.
+2. **Skip Step 2 (Static tooling)**. Tool output is *not* re-captured. Tooling appendix in the new report is copied from the loaded report with a `(continued from <prior date>)` annotation.
+3. **Skip Step 3 (Agent fan-out)** entirely.
+4. **Run Step 1.5 (Tracked-secrets scan)** — fast, deterministic, catches new secrets that may have been added since the prior run.
+5. **Run Step 4.4 (Apply `.audit-ignore.yml`)** — load the file fresh; surface stale ignores.
+6. **Run Step 4.5 (Money revalidation)** if any money findings remain after ignores.
+7. **Run Step 5.5 (Self-check)** including new C6 / C7 logic.
+8. **Run Step 5.7 (Trend)** with the loaded report itself as prior. *Re-run trend uses the loaded report's `trend.prior_report_path` if present so the chain stays linked.*
+9. **Render and write** new `report-YYYY-MM-DD.{json,md}` files with `audit.mode` set to `"continue"`.
+
+### When to use which
+
+| Scenario | Mode | Cost |
+|---|---|---|
+| First audit on a project | `--standard` (default) | ~50K tokens |
+| Re-audit after fixing 3 blockers | `--continue` | ~5K tokens |
+| Compare a hand-edited finding set | `--from-findings=fixed-baseline.json` | ~5K tokens |
+| Same as previous run but with re-detected stack | `--continue --re-detect` | ~6K tokens |
+| Full fresh audit | `--standard` (or `--quick`) | ~50K / ~13K tokens |
+
+### Hard rules
+
+- `--continue` and `--from-findings` are mutually exclusive.
+- `--continue` errors out cleanly if no prior report exists in `tmp/rails-audit/`.
+- The schema_version of the loaded report must match the current skill's; otherwise abort with a migration suggestion (`"Prior report schema_version <N> incompatible with current <M>; run a fresh audit"`).
+- `audit.mode` in the new report records `"continue"` or `"from-findings"` (NOT the original mode of the loaded report).
+
 ## Workflow
 
 ### Step 0. Provision tooling
