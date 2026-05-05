@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Added (v0.5 milestone PR#6 — bin/install-hooks for pre-commit secrets scan)
+
+- **`bin/install-hooks`** — bash script that wires `bin/scan-secrets --strict` into `.git/hooks/pre-commit`. Modes: install (default), `--uninstall`, `--dry-run`, `--help`.
+- The hook block is fenced with begin/end markers so install-hooks can find and remove its own block without touching other hook content. Composable with existing pre-commit setups.
+- Bypass for one commit via `git commit --no-verify` (documented in the install message).
+- The audit catches existing tracked secrets (Step 1.5 scan); the pre-commit hook prevents new ones — closes the loop.
+- Closes #56.
+
 ### Added (v0.5 milestone PR#5 — Live token accounting contract)
 
 - New "Live token accounting" section in `dimensions/cost-estimation.md` documenting how the skill populates `cost.actual_input_tokens` / `cost.actual_output_tokens` when the harness exposes per-call usage metadata. Three capture points: Bash tool invocations, agent fan-out, synthesis/render.

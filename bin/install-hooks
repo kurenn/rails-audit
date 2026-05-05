@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Install rails-audit git hooks in the current repo.
+#
+# Usage:
+#   bin/install-hooks                  # install pre-commit secrets scanner
+#   bin/install-hooks --uninstall      # remove hooks installed by this script
+#   bin/install-hooks --dry-run        # show what would change
+#   bin/install-hooks --help
+#
+# Currently installs:
+#   pre-commit — runs `bin/scan-secrets --strict` against staged files
+#   to block commits that introduce secret-shaped filenames.
+
+set -euo pipefail
+
+MODE="install"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --uninstall) MODE="uninstall" ;;
+    --dry-run)   MODE="dry-run" ;;
+    -h|--help)
+      head -n 13 "$0" | tail -n 12 | sed 's/^# \?//'
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+# Resolve scan-secrets path: prefer same-dir-as-this-script (most common
+# when this script is run from a checkout of rails-audit), else PATH.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCAN_SECRETS="${SCRIPT_DIR}/scan-secrets"
+if [ ! -x "$SCAN_SECRETS" ]; then
+  SCAN_SECRETS="$(command -v scan-secrets || true)"
+fi
+if [ -z "$SCAN_SECRETS" ]; then
+  echo "Could not locate scan-secrets executable. Make sure rails-audit is installed." >&2
+  exit 2
+fi
+
+if [ ! -d ".git" ]; then
+  echo "Not a git repository (no .git directory found)." >&2
+  exit 2
+fi
+
+HOOK_PATH=".git/hooks/pre-commit"
+MARKER_BEGIN="# >>> rails-audit pre-commit (scan-secrets) — managed by bin/install-hooks"
+MARKER_END="# <<< rails-audit pre-commit"
+
+HOOK_BLOCK="$MARKER_BEGIN
+if [ -x \"$SCAN_SECRETS\" ]; then
+  staged_secret_files=\$(git diff --cached --name-only --diff-filter=A | xargs -I {} sh -c 'echo \"{}\"' 2>/dev/null)
+  if [ -n \"\$staged_secret_files\" ]; then
+    if ! \"$SCAN_SECRETS\" --strict > /dev/null 2>&1; then
+      echo \"\"
+      echo \"  rails-audit: tracked secret-shaped file detected — commit blocked.\"
+      echo \"  run: $SCAN_SECRETS\"
+      echo \"  to see what was caught. To override (rare), commit with --no-verify.\"
+      echo \"\"
+      exit 1
+    fi
+  fi
+fi
+$MARKER_END"
+
+case "$MODE" in
+  install)
+    if [ -f "$HOOK_PATH" ] && grep -qF "$MARKER_BEGIN" "$HOOK_PATH" 2>/dev/null; then
+      echo "Hook already installed at $HOOK_PATH (marker present). Use --uninstall to remove."
+      exit 0
+    fi
+    if [ ! -f "$HOOK_PATH" ]; then
+      printf "#!/usr/bin/env bash\nset -e\n\n" > "$HOOK_PATH"
+    fi
+    printf "\n%s\n" "$HOOK_BLOCK" >> "$HOOK_PATH"
+    chmod +x "$HOOK_PATH"
+    echo "Installed rails-audit pre-commit hook at $HOOK_PATH"
+    echo "Will run: $SCAN_SECRETS --strict on every commit."
+    echo "To bypass for one commit: git commit --no-verify"
+    echo "To remove: $0 --uninstall"
+    ;;
+
+  uninstall)
+    if [ ! -f "$HOOK_PATH" ] || ! grep -qF "$MARKER_BEGIN" "$HOOK_PATH" 2>/dev/null; then
+      echo "No rails-audit hook found at $HOOK_PATH."
+      exit 0
+    fi
+    awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
+      BEGIN { skip = 0 }
+      $0 == begin { skip = 1; next }
+      skip && $0 == end { skip = 0; next }
+      !skip { print }
+    ' "$HOOK_PATH" > "${HOOK_PATH}.tmp"
+    mv "${HOOK_PATH}.tmp" "$HOOK_PATH"
+    chmod +x "$HOOK_PATH"
+    echo "Removed rails-audit hook from $HOOK_PATH (other content preserved)."
+    ;;
+
+  dry-run)
+    echo "Would write to $HOOK_PATH:"
+    echo "---"
+    echo "$HOOK_BLOCK"
+    echo "---"
+    if [ -f "$HOOK_PATH" ] && grep -qF "$MARKER_BEGIN" "$HOOK_PATH" 2>/dev/null; then
+      echo "(Hook is already installed — dry-run would be a no-op.)"
+    fi
+    ;;
+esac
