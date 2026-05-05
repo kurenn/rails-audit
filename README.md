@@ -86,6 +86,16 @@ or
 
 The skill writes the report to `tmp/rails-audit/report-YYYY-MM-DD.md` and replies with a ≤200-word summary linking to the file.
 
+## Standalone tool inventory
+
+```bash
+bin/check-tools                  # human-readable table
+bin/check-tools --json           # machine-readable (matches the report.json `tooling{}` block)
+bin/check-tools --required-only  # exits 1 if any Tier-1 tool is missing — useful as a CI pre-flight
+```
+
+Run from any Rails project root with the skill installed at `~/.claude/skills/rails-audit`. Reads `tooling.md` for tier definitions, then detects each tool by Gemfile presence + binary in PATH.
+
 ## Project profile (optional)
 
 Tell the skill about your stack so checks adapt. Create `.claude/rails-audit.yml` at repo root:

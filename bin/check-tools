@@ -1,0 +1,263 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/check-tools — inventory rails-audit tooling in the current project.
+#
+# Usage:
+#   bin/check-tools                  # human-readable table
+#   bin/check-tools --json           # JSON matching report.schema.json `tooling{}` block
+#   bin/check-tools --required-only  # exit 1 if any Tier-1 tool is missing, else 0
+#   bin/check-tools --help           # this help
+#
+# Reads `tooling.md` from the skill root for the tier definitions, then detects
+# each tool by Gemfile presence + binary in PATH. Versions captured via
+# `<tool> --version` (preferring `bundle exec` when the gem is in the Gemfile).
+
+require 'json'
+require 'open3'
+
+SKILL_ROOT = File.expand_path('..', __dir__)
+TOOLING_MD = File.join(SKILL_ROOT, 'tooling.md')
+
+INSTALL_HINT = {
+  'brakeman'             => "gem 'brakeman', group: :development, require: false",
+  'bundler-audit'        => "gem 'bundler-audit', group: :development, require: false",
+  'rubocop'              => "gem 'rubocop', group: :development, require: false",
+  'reek'                 => "gem 'reek', group: :development, require: false",
+  'rails_best_practices' => "gem 'rails_best_practices', group: :development, require: false",
+  'flog'                 => "gem 'flog', group: :development, require: false",
+  'flay'                 => "gem 'flay', group: :development, require: false",
+  'simplecov'            => "gem 'simplecov', group: :test, require: false",
+  'rubycritic'           => "gem 'rubycritic', group: :development, require: false",
+  'fasterer'             => "gem 'fasterer', group: :development, require: false",
+  'debride'              => "gem 'debride', group: :development, require: false",
+  'bullet'               => "gem 'bullet', group: %i[development test]",
+  'mutant'               => "gem 'mutant', group: :test, require: false",
+  'mutest'               => "gem 'mutest', group: :test, require: false"
+}.freeze
+
+# ---------------------------------------------------------------------------
+# tooling.md parser
+
+# Extract the per-tier tool list from tooling.md. Tier-section headings look
+# like "## Tier 1: required" / "## Tier 2: recommended" / etc. Each tier
+# is followed by a markdown table whose first column is `Tool`. Entries are
+# either `\`name\`` (gem-based — what we inspect) or `\`name args\`` (built-in
+# command like `rails routes` / `bundle outdated` — we skip those, they aren't
+# gems).
+MAX_PARSED_TIER = 3 # Tier 4 is operational (bin/setup, docker build) — not gems
+
+def parse_tier_tools
+  return {} unless File.exist?(TOOLING_MD)
+  tiers = {}
+  current_tier = nil
+  File.foreach(TOOLING_MD) do |line|
+    if line =~ /^##\s+Tier\s+(\d+)/
+      current_tier = Regexp.last_match(1).to_i
+      tiers[current_tier] ||= [] if current_tier <= MAX_PARSED_TIER
+    elsif current_tier && current_tier <= MAX_PARSED_TIER && line =~ /^\|\s*`([^`]+)`/
+      raw = Regexp.last_match(1).strip
+      next if raw.include?(' ')        # skip multi-word built-ins
+      next if raw.include?('/')        # skip paths like bin/setup
+      next if raw.start_with?('.')     # skip dotfiles
+      next unless raw =~ /\A[a-z][\w-]*\z/i  # gem-name shape
+      tiers[current_tier] ||= []
+      tiers[current_tier] << raw unless tiers[current_tier].include?(raw)
+    end
+  end
+  tiers
+end
+
+# ---------------------------------------------------------------------------
+# Detection
+
+def gem_in_gemfile?(name)
+  return false unless File.exist?('Gemfile')
+  File.foreach('Gemfile').any? do |l|
+    l =~ /^\s*gem\s+['"]#{Regexp.escape(name)}['"]/
+  end
+end
+
+def binary_in_path?(name)
+  out, status = Open3.capture2('which', name)
+  status.success? && !out.strip.empty?
+rescue StandardError
+  false
+end
+
+ANSI_RE = /\e\[[\d;]*[A-Za-z]/
+
+def sanitize_version(line)
+  return nil unless line && !line.strip.empty?
+  cleaned = line.gsub(ANSI_RE, '').strip
+  # Reject anything that looks like an error message rather than a version string
+  bad_patterns = [
+    /no such file/i,
+    /command not found/i,
+    /\berror\b/i,
+    /\bunknown\b/i,
+    /usage:/i
+  ]
+  return nil if bad_patterns.any? { |re| cleaned =~ re }
+  cleaned
+end
+
+def detect_version(tool)
+  return nil unless binary_in_path?(tool) || gem_in_gemfile?(tool)
+  cmds = []
+  cmds << ['bundle', 'exec', tool, '--version'] if gem_in_gemfile?(tool)
+  cmds << [tool, '--version']
+  cmds.each do |cmd|
+    out, _err, status = Open3.capture3(*cmd)
+    next unless status.success?
+    line = out.strip.split("\n").first
+    sanitized = sanitize_version(line)
+    return sanitized if sanitized
+  end
+  nil
+rescue StandardError
+  nil
+end
+
+# ---------------------------------------------------------------------------
+# Inventory
+
+# Returns an array of hashes shaped to match `report.schema.json` $defs/tool_status.
+def inventory
+  tiers = parse_tier_tools
+  return [] if tiers.empty?
+  results = []
+  tiers.sort.each do |tier, tools|
+    tools.each do |name|
+      in_gemfile = gem_in_gemfile?(name)
+      binary     = binary_in_path?(name)
+      version    = (binary || in_gemfile) ? detect_version(name) : nil
+      status     = if version
+                     'available'
+                   elsif in_gemfile
+                     'in_gemfile_not_installed'
+                   else
+                     'missing'
+                   end
+      results << {
+        name: name,
+        tier: tier,
+        version: version,
+        in_gemfile: in_gemfile,
+        binary_in_path: binary,
+        status: status,
+        install_hint: status == 'missing' ? INSTALL_HINT[name] : nil
+      }
+    end
+  end
+  results
+end
+
+# Group inventory into ran/missing/skipped to match `report.schema.json`
+# `tooling{}` shape. The standalone script can't know skipped (that's a deep-mode
+# concept); skipped is always [] here.
+def grouped(items)
+  ran     = items.select { |i| i[:status] == 'available' }
+                 .map { |i| { name: i[:name], tier: i[:tier], version: i[:version] } }
+  missing = items.reject { |i| i[:status] == 'available' }
+                 .map do |i|
+                   {
+                     name: i[:name],
+                     tier: i[:tier],
+                     reason: i[:status] == 'in_gemfile_not_installed' ?
+                       'declared in Gemfile but not installed (run `bundle install`)' :
+                       'not installed; suggest: ' + (i[:install_hint] || "gem install #{i[:name]}")
+                   }
+                 end
+  { ran: ran, missing: missing, skipped: [] }
+end
+
+# ---------------------------------------------------------------------------
+# Output
+
+def render_table(items)
+  rows = items.map do |i|
+    tier_str   = i[:tier] ? "T#{i[:tier]}" : '?'
+    status     = case i[:status]
+                 when 'available'                then 'OK'
+                 when 'in_gemfile_not_installed' then 'GEMFILE'
+                 when 'missing'                  then 'MISSING'
+                 else '?'
+                 end
+    [tier_str, i[:name], status, i[:version] || '—', i[:install_hint] || '']
+  end
+
+  headers = %w[Tier Tool Status Version Install\ hint]
+  widths  = headers.each_with_index.map do |h, idx|
+    [h.length, *rows.map { |r| r[idx].to_s.length }].max
+  end
+
+  fmt = widths.map { |w| "%-#{w}s" }.join('  ')
+  puts(format(fmt, *headers))
+  puts(widths.map { |w| '-' * w }.join('  '))
+  rows.each { |r| puts(format(fmt, *r.map(&:to_s))) }
+end
+
+def render_json(items)
+  out = {
+    schema_version: 2,
+    generated_at:   Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
+    project_root:   Dir.pwd,
+    tooling:        grouped(items)
+  }
+  puts JSON.pretty_generate(out)
+end
+
+# ---------------------------------------------------------------------------
+# Main
+
+def parse_args(argv)
+  modes = []
+  argv.each do |arg|
+    case arg
+    when '--json'           then modes << :json
+    when '--required-only'  then modes << :required_only
+    when '-h', '--help'     then modes << :help
+    else
+      warn "Unknown option: #{arg}"
+      exit 2
+    end
+  end
+  modes.empty? ? [:table] : modes
+end
+
+def show_help
+  puts File.foreach(__FILE__).take(15).map { |l| l.sub(/^#\s?/, '') }.join
+end
+
+def main(argv)
+  modes = parse_args(argv)
+  return show_help if modes.include?(:help)
+
+  unless File.exist?(TOOLING_MD)
+    warn "tooling.md not found at #{TOOLING_MD} — is the skill installed?"
+    exit 2
+  end
+
+  items = inventory
+  if items.empty?
+    warn 'No tier tables parsed from tooling.md.'
+    exit 2
+  end
+
+  if modes.include?(:json)
+    render_json(items)
+  else
+    render_table(items)
+  end
+
+  if modes.include?(:required_only)
+    missing_tier1 = items.select { |i| i[:tier] == 1 && i[:status] != 'available' }
+    if missing_tier1.any?
+      warn "\nMissing required (Tier 1) tools: #{missing_tier1.map { |i| i[:name] }.join(', ')}"
+      exit 1
+    end
+  end
+end
+
+main(ARGV) if __FILE__ == $PROGRAM_NAME
