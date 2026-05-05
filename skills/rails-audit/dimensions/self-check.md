@@ -2,13 +2,19 @@
 
 The skill polices its own report before delivering it. Self-check produces *meta-findings* about the audit itself — not the codebase. Outcomes land in JSON `self_check{}` and render in the markdown report as a `## Self-check` section above the punch list.
 
-In **v0.2**, self-check is **warn-only**: it never blocks. It surfaces calibration smells and lets the user decide. Hardening to block (with auto-demotion) is planned for v0.3 once the thresholds have been calibrated against ~5 real audits.
+**v0.4** hardens self-check from warn-only to **block-with-override**: when C1 or C2 fires AND C7 does *not* override, the skill stops at Step 5.5 and runs prompt **P7** (`prompts.md`). The user must pick `block` (default — don't ship until findings are revisited), `demote` (auto-demote inflated severities one tier and proceed), or `accept` (record an override reason in `audit.calibration_overrides[]` and proceed).
+
+C3 (unverified blocker) **always blocks** — no override. An unverified blocker is a hallucination risk; the user has to either re-cite it or remove it.
+
+C4 (phase mismatch), C5 (scorecard mismatch), C6 (stale coverage) remain warn-only — they're informational, not exploit-shaped.
+
+In v0.2 self-check was warn-only across the board. v0.4's hardening reflects calibration evidence from the influapp + coba dogfoods (2026-05-05): both projects' C1/C2 firings turned out to be either real defect density (C7 override applied) OR genuine synthesis inflation (worth blocking). Warn-only let synthesis ship inflated reports; block-with-override forces the conversation.
 
 ---
 
 ## Run order
 
-Self-check runs as **Step 5.5** in `SKILL.md` — *after* synthesis (Step 4) produces JSON, *before* the markdown render (Step 5). Self-check may mutate `self_check{}` and individual `findings[].self_check{}` fields; it does not mutate severities or remove findings (v0.2 constraint).
+Self-check runs as **Step 5.5** in `SKILL.md` — *after* synthesis (Step 4) and the various revalidation passes (4.4–4.6), *before* trend (5.7) and markdown render (6). Self-check may mutate `self_check{}` and individual `findings[].self_check{}` fields. **In v0.4+, self-check may also mutate finding `severity`** when the user picks `demote` at prompt P7 — the demoted finding gets `self_check.status: "demoted"` and a `notes` line explaining which check caused it.
 
 ---
 
@@ -156,10 +162,10 @@ In v0.2 the default flow is non-interactive: warnings render, no demotion happen
 
 ## What this dimension deliberately does *not* do
 
-- **Does not edit findings.** v0.2 self-check is read-only on the synthesis output.
-- **Does not block.** Even a 100%-blocker report ships.
+- **Does not edit findings without consent.** v0.4 may demote a severity but only when the user explicitly picks `demote` at prompt P7.
+- **Does not silently block.** When self-check blocks, the user gets prompt P7 with three explicit choices.
 - **Does not check fact-correctness of findings.** That's the job of dimension files + agent fan-out + verification in Step 4. Self-check only audits the *shape* of the report.
-- **Does not reconcile scorecards across audit runs.** Trend (PR#10) is a separate dimension.
+- **Does not reconcile scorecards across audit runs.** Trend is a separate dimension.
 
 ---
 

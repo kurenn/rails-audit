@@ -4,6 +4,16 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+### Changed (v0.3 milestone PR#4 — Harden self-check: warn-only → block-with-override)
+
+- **`dimensions/self-check.md`** — C1 (severity inflation), C2 (blocker over-use), C3 (unverified blocker) now block at Step 5.5 unless overridden. C4, C5, C6 remain warn-only. C7 still suppresses C1/C2 (its whole purpose).
+- **`prompts.md` P7** — redesigned. Was `show / demote / accept` with default `show` (v0.2/v0.3). Now `block / demote / accept` with default `block`. New auto-demote algorithm specified (smallest-evidence-first heuristic for C1; small-time-estimate-first for C2). `accept` requires a free-form non-empty reason recorded in `audit.calibration_overrides[]`.
+- **`SKILL.md` Step 5.5** — explicit block behavior documented; partial JSON written on block; markdown not rendered.
+- **Schema** — new `audit.calibration_overrides[]` field (additive). Records `{check_id, override_reason, override_at, override_by}` when P7 `accept` is picked.
+- C3 (unverified blocker) always blocks with no `accept` option — hallucination risk must be addressed.
+- Backwards-compat: v0.2/v0.3 reports validate cleanly against the v0.4 schema (the new `calibration_overrides` is optional).
+- Closes #26.
+
 ### Added (v0.3 milestone PR#3 — Re-run modes: --continue and --from-findings)
 
 - **`--continue`** — load most recent `report-*.json` in `tmp/rails-audit/`; re-run only Step 1.5 (secrets scan) + Steps 4.4 onward (ignores, revalidations, self-check, trend, render). Skips detect + agent fan-out. ~5K tokens vs ~50K for a fresh standard audit.

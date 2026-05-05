@@ -282,17 +282,27 @@ Re-validation never modifies `id`, `primary_dimension`, or `secondary_dimensions
 
 ### Step 5.5 (was 5). Self-check the report
 
-Before rendering, run the self-check defined in `dimensions/self-check.md`. The five checks (C1–C5) operate on the JSON from Step 4:
+Before rendering, run the self-check defined in `dimensions/self-check.md`. Seven checks (C1–C7) operate on the JSON from Step 4:
 
-- **C1** Severity inflation — warn if `>40%` of findings are `high`
-- **C2** Blocker over-use — warn if `>25%` are `blocker`
-- **C3** Unverified blocker — for each blocker, `sed -n '<line>p' <file>` must contain a substring of `evidence.normalized`. Fail → mark `findings[<id>].self_check.status = "unverified"` and add to `self_check.unverified_blockers[]`
-- **C4** Phase dependency mismatch — `findings[id].phase` must equal `fix_sequence[].finding_ids` references
-- **C5** Scorecard ↔ finding-count mismatch — per-dimension score must fall in the expected band given the weighted finding count for that dimension (blocker=4, high=3, medium=2, low=1)
+- **C1** Severity inflation — `>40%` of findings are `high` (warn unless C7 overrides)
+- **C2** Blocker over-use — `>25%` are `blocker` (warn unless C7 overrides)
+- **C3** Unverified blocker — each blocker's cited line must `sed -n '<line>p' <file>` confirm a substring of `evidence.normalized` (always fires; no override)
+- **C4** Phase dependency mismatch (warn-only)
+- **C5** Scorecard ↔ finding-count mismatch (warn-only)
+- **C6** Stale coverage — `coverage/.resultset.json` mtime > 30 days (warn-only)
+- **C7** Real-distribution override — suppresses C1/C2 when blockers all verified AND `risk_score ≤ 4` AND ≥6 dimensions ≤4
 
-In **v0.2** these are warn-only: results land in `self_check.calibration.warnings[]` and per-finding `self_check{}`, no findings are removed or demoted. If warnings fire and the user is interactively driving the audit, prompt **P7** (`prompts.md`) — show / demote / accept. Default is `show`. v0.2 honors `accept` automatically (skill ships the report); `demote` is a no-op in v0.2 and lands as a real action in v0.3.
+**v0.4+ behavior — block-with-override.** When C1, C2, or C3 fires (and C7 doesn't override C1/C2), the skill **stops at Step 5.5** and runs prompt **P7** in `prompts.md`. The user picks:
 
-Self-check meta-findings render in the markdown report as a `## Self-check` section above the punch list (template already supports this).
+- `block` (default) — skill aborts, writes partial JSON to `tmp/rails-audit/report-YYYY-MM-DD-blocked.json`, does NOT render markdown. Re-run after fixing findings.
+- `demote` — skill auto-demotes (high → medium for C1; blocker → high for C2) until thresholds clear. Demoted findings get `self_check.status: "demoted"` with `notes` citing the check + original severity. Skill proceeds.
+- `accept` — skill prompts for a non-empty reason, records it in `audit.calibration_overrides[]`, proceeds.
+
+**C3 (unverified blocker) always blocks** with no `accept` option — an unverified blocker is hallucination risk and must be re-cited or removed.
+
+C4, C5, C6 remain warn-only — they're informational, not exploit-shaped.
+
+Self-check meta-findings render in the markdown report as a `## Self-check` section above the punch list.
 
 ### Step 5.7. Compute trend
 
