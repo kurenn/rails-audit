@@ -121,6 +121,14 @@ This is mostly external (PagerDuty / Opsgenie / Slack), but check:
 grep -i "slack\|pagerduty\|opsgenie\|teams\|notify" .github/workflows/*.yml 2>/dev/null
 ```
 
+## Cross-cuts
+
+- **`data-governance`** — PII in logs is governance primary; observability secondary.
+- **`security-and-authz`** — `filter_parameters` gaps and unscrubbed error tracker payloads cross with security.
+- **`deploy-and-ci`** — health/readyz/metrics endpoints are deploy primary; observability secondary.
+- **`reliability`** — APM and alerting feed reliability decisions.
+- **`background-jobs`** — job-failure visibility is jobs primary; observability secondary.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -136,3 +144,13 @@ grep -i "slack\|pagerduty\|opsgenie\|teams\|notify" .github/workflows/*.yml 2>/d
 | No separate `/readyz` from `/healthz` | Medium |
 | No custom business metrics | Low–Medium (depends on app size) |
 | No alert routing for deploy failures | Medium |
+
+## Reference points
+
+- **[`roidrage/lograge`](https://github.com/roidrage/lograge)** — single-line JSON logging; README has Rails 7 setup.
+- **[`getsentry/sentry-ruby`](https://github.com/getsentry/sentry-ruby)** — `before_send` PII scrubbing patterns documented.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — Sentry config + structured logger setup are good references.
+- **[`ankane/blazer`](https://github.com/ankane/blazer)** — for projects that need internal dashboards over their own DB.
+- **[OpenTelemetry Ruby](https://github.com/open-telemetry/opentelemetry-ruby)** — vendor-neutral tracing.
+
+_Sentry's `before_send` API has shifted — verify against the version in your Gemfile._

@@ -130,6 +130,14 @@ Each → **Medium** (or **High** for password/token leaking into logs).
 
 This is rarely visible in the repo; surface as "verify with user" unless IAM config is in repo (Terraform / Pulumi).
 
+## Cross-cuts
+
+- **`security-and-authz`** — encryption at rest, PII in logs, secrets handling cross both.
+- **`observability`** — PII in custom log lines and error tracker payloads cross with observability.
+- **`data-integrity`** — soft-delete on PII tables, retention policies cross with integrity.
+- **`money-and-payments`** — audit trail on money mutations is governance primary; money secondary.
+- **`deploy-and-ci`** — prod-points-at-staging or unencrypted secrets in workflows are deploy *and* governance.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -145,3 +153,13 @@ This is rarely visible in the repo; surface as "verify with user" unless IAM con
 | No data export endpoint (EU users) | Medium |
 | Overprivileged cloud service account | Medium |
 | No documented subprocessor list (B2B) | Low |
+
+## Reference points
+
+- **[`ankane/lockbox`](https://github.com/ankane/lockbox)** — application-layer encryption; cleaner API than `attr_encrypted`. README covers Rails 7 `encrypts` interop.
+- **[`paper-trail-gem/paper_trail`](https://github.com/paper-trail-gem/paper_trail)** — canonical audit log; supports per-model granularity and version diffs.
+- **[`palkan/audited`](https://github.com/collectiveidea/audited)** — alternative audit log; lighter weight than paper_trail for simple cases.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — has GDPR-compliant data export and account-deletion flows. See `app/services/account_deletion_service.rb` and `app/services/backup_service.rb` patterns.
+- **[Rails 7 ActiveRecord encryption guide](https://guides.rubyonrails.org/active_record_encryption.html)** — built-in option; works for most cases.
+
+_Compliance landscapes (GDPR, CCPA, HIPAA) shift; legal sign-off is required regardless of the technical pattern._

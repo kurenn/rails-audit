@@ -136,8 +136,28 @@ A ratio < 0.5 in a Rails app is a yellow flag (thin tests). Per-layer ratios are
 | Spec/app LOC ratio <0.5 globally | Medium |
 | `:focus`/`fit` left in tree | High (unmerged broken commit smell) |
 
+## Cross-cuts
+
+When tagging findings in this dimension, also consider these as `secondary_dimensions[]`:
+
+- **`developer-experience`** — slow CI / unstable specs are also DX problems (CI runtime >15min, flaky retries).
+- **`risk-hotspots`** — a large untested file is *both* a hotspot and a coverage gap; tag both.
+- **`money-and-payments`** — coverage gaps inside `app/services/payments/*` are money-criticality; tag both.
+- **`security-and-authz`** — auth-form spec gaps are security risks; tag both.
+
 ## False positives to avoid
 
 - A controller without a request spec is fine if it has thorough service-layer coverage of the same logic. Check the layer below before flagging.
 - `allow_any_instance_of` is sometimes the only sane option for legacy code; don't flag every instance, flag concentrations.
 - Low coverage on `app/admin/` (ActiveAdmin) is conventional and not a defect.
+
+## Reference points
+
+Real-world Rails projects worth studying for this dimension. Patterns, not commandments — verify against your stack.
+
+- **[`rspec/rspec-rails`](https://github.com/rspec/rspec-rails)** — the canonical RSpec-Rails project; its own `spec/` is a model of organization (per-layer subdirs, shared examples in `spec/support/`).
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — large Rails app with disciplined factory use, parallelized CI, and explicit time-freezing. Look at `spec/spec_helper.rb` for WebMock setup.
+- **[`thoughtbot/factory_bot_rails`](https://github.com/thoughtbot/factory_bot_rails)** — for non-cascading factory patterns.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — `spec/lib/` and `spec/services/` show service-layer coverage discipline.
+
+_Verify cited paths on a recent commit before relying — Rails project structure shifts._

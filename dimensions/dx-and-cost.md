@@ -194,6 +194,14 @@ ls -la public/assets/ 2>/dev/null | head
 
 External API calls per request × requests/day = $/month. Stripe/Twilio especially. Unmonitored → **Low** (track but don't lead).
 
+## Cross-cuts
+
+- **`spec-stability`** — slow CI / flake retries are stability primary; DX secondary.
+- **`deploy-and-ci`** — Dockerfile choices, CI mechanics, environment parity cross both.
+- **`performance`** — table size growth and missing indexes are perf primary; cost secondary.
+- **`reliability`** — Cloud Run scaling config is reliability primary; cost secondary.
+- **`developer-experience`** — `bin/setup`, README freshness, ADRs are DX primary if onboarding-related.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -212,3 +220,14 @@ External API calls per request × requests/day = $/month. Stripe/Twilio especial
 | No table-size monitoring/archiving plan on tables >1M rows | Medium |
 | No PR template / CONTRIBUTING.md (team >3) | Low |
 | No ADR / decision log | Low |
+
+## Reference points
+
+- **[`thoughtbot/suspenders`](https://github.com/thoughtbot/suspenders)** — Rails template with opinionated `bin/setup` that actually works on a fresh checkout.
+- **[`gitlabhq/gitlabhq`](https://gitlab.com/gitlab-org/gitlab)** development docs — onboarding and dev-environment parity at scale.
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — `bin/docker_dev_env` and developer docs are well-maintained.
+- **[`evilmartians/anyway_config`](https://github.com/palkan/anyway_config)** — for env-config consistency between dev and prod.
+- **[`pagy`](https://github.com/ddnexus/pagy)** — fastest Ruby paginator; for projects with cost-sensitive list endpoints.
+- **[Cloud Run scaling docs](https://cloud.google.com/run/docs/about-instance-autoscaling)** — concurrency / min-instances / max-instances tradeoffs.
+
+_Rails `bin/setup` patterns vary widely; consider it a smell if the repo's hasn't been touched in >12 months._

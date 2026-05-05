@@ -238,6 +238,16 @@ grep -rnE "^[[:space:]]*# +(def |class |module |if |end |[A-Z]\w+\.)" app/ --inc
 
 Concentrations of commented-out code → **Medium** (likely dead). Use `debride` for actual dead-method detection.
 
+## Cross-cuts
+
+Code-smell findings frequently touch other dimensions. Default secondary tags:
+
+- **`data-integrity`** — `update_column`, `save(validate: false)`, missing unique indexes are integrity-relevant.
+- **`security-and-authz`** — smells on security columns (`is_admin`, `is_blocked`, `role`) are auth-relevant.
+- **`money-and-payments`** — smells on money columns (`stripe_*`, `amount_*`, `payout_*`) are money-relevant.
+- **`performance`** — fat methods, train wrecks in serializers correlate with N+1 risk.
+- **`risk-hotspots`** — a smell concentrated in a large file is both a smell *and* a hotspot.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -259,3 +269,13 @@ Concentrations of commented-out code → **Medium** (likely dead). Use `debride`
 | `rubycritic` F-grade in admin/legacy | Low |
 | TODO density ≥10 in one file | Medium |
 | Magic numbers in payment code | Medium |
+
+## Reference points
+
+- **[`rubocop/rubocop`](https://github.com/rubocop/rubocop)** — its own `.rubocop.yml` is a calibrated baseline.
+- **[`gitlabhq/gitlabhq`](https://gitlab.com/gitlab-org/gitlab)** — `.rubocop.yml` and the GitLab development docs cover concerns / service objects / form objects with explicit rationale.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — model layer is disciplined despite the project's size; `app/lib/` for value objects.
+- **[`troessner/reek`](https://github.com/troessner/reek)** — README has well-illustrated examples of each smell type with refactor patterns.
+- **[`thoughtbot/suspenders`](https://github.com/thoughtbot/suspenders)** — Rails template with opinionated linting + service-layer conventions baked in.
+
+_Linting configs drift — pin to a known-good commit when borrowing patterns._

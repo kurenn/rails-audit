@@ -155,6 +155,15 @@ If `cable.yml` falls back to `redis://localhost:6379` without env-based config �
 
 In deep mode, ask the user (don't actually trigger): "If a deploy went bad right now, what's the rollback command? Walk me through it." Capture answer in the report — undocumented rollback is a **High** finding.
 
+## Cross-cuts
+
+When tagging findings in this dimension, also consider these as `secondary_dimensions[]`:
+
+- **`security-and-authz`** — `force_ssl`, hardcoded secrets in workflows, and unpinned action SHAs are security findings too.
+- **`foundation`** — EOL Ruby/Rails surfaces here (CI builds against unsupported version) and in foundation.
+- **`reliability`** — DB pool sizing, no rollback path, and missing healthchecks affect reliability under load.
+- **`data-governance`** — prod-points-at-staging or unencrypted secrets in workflows are governance concerns.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -172,3 +181,13 @@ In deep mode, ask the user (don't actually trigger): "If a deploy went bad right
 | Loose third-party action pin | Medium |
 | Container running as root | Medium |
 | No `.dockerignore` or sloppy coverage | Low |
+
+## Reference points
+
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — `Dockerfile` is multi-stage with a digest-pinned base; production env vars enumerated in `.env.production.sample`.
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — `config/environments/production.rb` shows `force_ssl`, structured logging, and request-id discipline. Their Docker image build is well-documented.
+- **[`basecamp/kamal`](https://github.com/basecamp/kamal)** — reference for the Kamal deploy target. `examples/` directory shows `deploy.yml` patterns.
+- **[`heroku/heroku-buildpack-ruby`](https://github.com/heroku/heroku-buildpack-ruby)** — for projects deploying to Heroku.
+- **[Rails Foundation EOL schedule](https://endoflife.date/rails)** and **[Ruby EOL schedule](https://endoflife.date/ruby)** — single source of truth for foundation findings.
+
+_Verify cited paths on a recent commit; deploy targets evolve quickly._

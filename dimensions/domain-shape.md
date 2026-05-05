@@ -76,6 +76,13 @@ Each concern: 1-line summary of what it provides. Concerns named after a class (
 
 If there are >50 models, sketch the top-level domain clusters (e.g. "Users / Brands / Influencers" + "Campaigns / Collaboration Requests / Evidence" + "Payments / Payouts / Commissions"). Each cluster should map to a directory or naming pattern.
 
+## Cross-cuts
+
+Domain-shape findings are unusual — they're typically context, not findings. When they do produce a finding, common secondaries:
+
+- **`security-and-authz`** — mass-mutation routes on the unauthenticated tier are auth primary; domain-shape secondary.
+- **`risk-hotspots`** — overlapping layers (services + interactors) often correlate with hotspot files.
+
 ## Severity calibration
 
 This dimension rarely produces findings on its own. Use it for context. Flag **Medium** only when:
@@ -85,3 +92,12 @@ This dimension rarely produces findings on its own. Use it for context. Flag **M
 - Mass-mutation routes (delete/refresh/recompute) exposed at the unauthenticated tier.
 
 Otherwise, no findings. Just orient the report.
+
+## Reference points
+
+- **[`discourse/discourse`](https://github.com/discourse/discourse)** — well-organized service layer; `app/services/` follows clear naming conventions.
+- **[`mastodon/mastodon`](https://github.com/mastodon/mastodon)** — explicit `app/lib/` for value objects, `app/services/` for orchestration.
+- **[`gitlabhq/gitlabhq`](https://gitlab.com/gitlab-org/gitlab)** — large monolith with disciplined boundaries; their service-object base classes show consistent calling conventions.
+- **[Rails routing guide](https://guides.rubyonrails.org/routing.html)** — for canonical RESTful patterns and namespacing rationale.
+
+_Domain-shape findings are usually contextual — these references are for orientation, not patterns to cargo-cult._

@@ -206,6 +206,17 @@ grep -rn "find_or_create_by\|first_or_create" app/ --include="*.rb"
 
 Each match needs a corresponding unique DB index — verify in `db/schema.rb`.
 
+## Cross-cuts
+
+When tagging findings here, also consider these as `secondary_dimensions[]`:
+
+- **`authorization`** — IDOR is *primary* AuthZ; tag here secondary if the controller is auth-relevant.
+- **`money-and-payments`** — webhook signature/replay protection is security primary; tag money secondary.
+- **`deploy-and-ci`** — secrets in workflows, action pinning, container security live both here and in deploy.
+- **`data-governance`** — PII in logs, encryption-at-rest gaps cross with governance.
+- **`code-smells`** — `update_column(:is_blocked)` is a smell *and* an auth-bypass risk; tag both.
+- **`foundation`** — CVEs from EOL Ruby/Rails surface here (security primary) and in foundation.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -226,3 +237,13 @@ Each match needs a corresponding unique DB index — verify in `db/schema.rb`.
 | No CSP / `secure_headers` on HTML-rendering app | Medium |
 | `html_safe` / `raw` concentration | Medium |
 | `filter_parameters` doesn't include token/password | High |
+
+## Reference points
+
+- **[Rails Security Guide](https://guides.rubyonrails.org/security.html)** — official; covers OWASP-mapped patterns. Bookmark.
+- **[`varvet/pundit`](https://github.com/varvet/pundit)** — canonical AuthZ. Their README has good policy-spec patterns.
+- **[`rack/rack-attack`](https://github.com/rack/rack-attack)** — README shows rate-limit recipes for login / password reset / signup.
+- **[`heartcombo/devise`](https://github.com/heartcombo/devise)** — even if not used, their session/cookie defaults are a baseline.
+- **[`presidentbeef/brakeman`](https://github.com/presidentbeef/brakeman)** — not just a tool; the warnings doc is a security checklist in itself.
+
+_The Rails Security Guide is updated with each Rails release — always cite the current version._

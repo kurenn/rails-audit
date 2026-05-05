@@ -1,0 +1,46 @@
+# .audit-ignore.yml — suppress acknowledged audit findings
+#
+# Place at the repository root. The skill reads this file at Step 4.4
+# (between synthesis and money re-validation) and removes matching
+# findings from the punch list. Suppressed findings are still listed
+# in the report's Appendix D so the team has a paper trail.
+#
+# Match by fingerprint (the `id` field that begins with `f-`). The
+# fingerprint is stable across line moves and whitespace edits but
+# unstable across file renames or material code changes — so a fix
+# that materially changes the code will produce a new fingerprint
+# and the ignore stops applying naturally.
+#
+# Each entry MUST have:
+#   - id:              the finding fingerprint, prefixed `f-`
+#   - reason:          non-empty, non-whitespace; explains the acknowledgement
+#
+# Each entry MAY have:
+#   - acknowledged_by: email or handle
+#   - expires_at:      ISO date (YYYY-MM-DD); after this date the finding
+#                      re-surfaces with a "ignore expired" note
+#
+# Stale ignores (no current finding matches the id) appear in the report
+# under audit.ignore_warnings[] so they can be cleaned up.
+
+- id: f-c1b2c3d4e5f60002
+  reason: |
+    Bullet gem will be added in the Q3 N+1 audit sprint (LIN-1234).
+    Current performance is acceptable per Datadog dashboards.
+  acknowledged_by: abkuri88@gmail.com
+  expires_at: 2026-09-30
+
+- id: f-c1b2c3d4e5f60003
+  reason: |
+    The single mismatch (validates_uniqueness_of :referral_code) is
+    intentional — codes are tested for collision in Account::RegistrationForm
+    before save. Documented in db/migrate/20240101_add_referral_codes.rb.
+  acknowledged_by: abkuri88@gmail.com
+  # No expires_at — this is a permanent acknowledgement.
+
+# Example of an ignore that has expired — finding will re-surface with
+# an "ignore expired YYYY-MM-DD" note in the report.
+- id: f-deadbeefdeadbeef
+  reason: "Tracking in OPS-456 — was supposed to land by April."
+  acknowledged_by: abkuri88@gmail.com
+  expires_at: 2026-04-01

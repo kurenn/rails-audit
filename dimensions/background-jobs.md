@@ -160,6 +160,14 @@ grep "good_job" config/database.yml config/initializers/good_job*.rb 2>/dev/null
 - Execution mode (`:async`, `:external`)?
 - Cleanup of old `good_jobs` rows configured?
 
+## Cross-cuts
+
+- **`money-and-payments`** — payment jobs without retry/idempotency cross both.
+- **`reliability`** — retries, dead-letter, locks are reliability primary if framing is "what happens when external services hiccup."
+- **`observability`** — job runtime visibility, failed-job alerting cross with observability.
+- **`security-and-authz`** — Sidekiq Web UI mounted without auth is security primary; jobs secondary.
+- **`data-integrity`** — jobs that mutate state without transactions cross with integrity.
+
 ## Severity calibration
 
 | Pattern | Default tier |
@@ -175,3 +183,13 @@ grep "good_job" config/database.yml config/initializers/good_job*.rb 2>/dev/null
 | Long-running job without chunking | Medium |
 | Job count > spec count by >50% | High |
 | Vague job names | Low |
+
+## Reference points
+
+- **[`sidekiq/sidekiq`](https://github.com/sidekiq/sidekiq)** — README + wiki are the canonical reference for retry/discard and worker patterns.
+- **[`bensheldon/good_job`](https://github.com/bensheldon/good_job)** — Postgres-backed; their own test suite is a model for "what if this runs twice" specs.
+- **[`keypup-io/cloudtasker`](https://github.com/keypup-io/cloudtasker)** — for projects on Google Cloud Tasks; README documents callback HMAC and worker conventions.
+- **[Stripe's own architecture posts](https://stripe.com/blog/idempotency)** — idempotency at the API and job level.
+- **[`Shopify/maintenance_tasks`](https://github.com/Shopify/maintenance_tasks)** — long-running, resumable jobs with progress tracking.
+
+_Sidekiq's Pro/Enterprise features are documented separately; check which tier you're on._
