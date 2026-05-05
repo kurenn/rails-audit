@@ -1,0 +1,134 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/parse-brakeman — read tmp/rails-audit/brakeman.json and emit finding stubs.
+#
+# Usage:
+#   bin/parse-brakeman                          # read default path; emit JSON
+#   bin/parse-brakeman <path>                   # read custom path
+#   bin/parse-brakeman --table                  # human-readable
+#   bin/parse-brakeman --help
+#
+# Emits a JSON array of finding stubs ready to merge into findings[].
+# Filters known false positives (array-form Open3 — argv, no shell).
+
+require 'json'
+
+DEFAULT_PATH = 'tmp/rails-audit/brakeman.json'
+
+# Map brakeman warning_type → (primary_dim, default_severity)
+WARNING_MAP = {
+  'Command Injection'         => ['security-and-authz', 'high'],
+  'SQL Injection'             => ['security-and-authz', 'blocker'],
+  'Cross Site Scripting'      => ['security-and-authz', 'high'],
+  'Cross-Site Request Forgery'=> ['security-and-authz', 'high'],
+  'Mass Assignment'           => ['security-and-authz', 'high'],
+  'Format Validation'         => ['security-and-authz', 'high'],
+  'Open Redirect'             => ['security-and-authz', 'high'],
+  'Redirect'                  => ['security-and-authz', 'medium'],
+  'Authentication'            => ['security-and-authz', 'blocker'],
+  'Session Setting'           => ['security-and-authz', 'medium'],
+  'File Access'               => ['security-and-authz', 'high'],
+  'Remote Code Execution'     => ['security-and-authz', 'blocker'],
+  'Default Routes'            => ['security-and-authz', 'low'],
+  'Mail Link'                 => ['security-and-authz', 'low'],
+  'Unmaintained Dependency'   => ['foundation', 'blocker'],
+  'Weak Hash'                 => ['security-and-authz', 'medium'],
+  'Weak Encryption'           => ['security-and-authz', 'high'],
+  'Information Disclosure'    => ['security-and-authz', 'medium']
+}.freeze
+
+# Known false-positive patterns we filter out.
+def false_positive?(warning)
+  # Brakeman flags Open3.capture3(*array) as command injection at Medium
+  # confidence — but argv form doesn't go through a shell and is safe.
+  return true if warning['warning_type'] == 'Command Injection' &&
+                 warning['code']&.match?(/Open3\.(capture\d|popen)\(["'][^,]+["'],/)
+  false
+end
+
+def severity_from_confidence(confidence, default)
+  case confidence
+  when 'High'   then default
+  when 'Medium' then downgrade_one(default)
+  when 'Weak'   then 'low'
+  else               default
+  end
+end
+
+def downgrade_one(severity)
+  { 'blocker' => 'high', 'high' => 'medium', 'medium' => 'low', 'low' => 'low' }[severity]
+end
+
+def parse_warnings(json)
+  warnings = json['warnings'] || []
+  warnings.reject { |w| false_positive?(w) }
+end
+
+def to_finding_stub(warning, idx)
+  primary, default_sev = WARNING_MAP.fetch(warning['warning_type'], ['security-and-authz', 'medium'])
+  severity = severity_from_confidence(warning['confidence'], default_sev)
+
+  file = warning['file'] || ''
+  line = warning['line']
+  fp_seed = "#{primary}|#{file}|#{warning['warning_type']}|#{(warning['code'] || '').strip[0, 80]}"
+  fingerprint = "f-bk-#{format('%04d', idx + 1)}-#{fp_seed.sum.to_s(16)[0..7]}"
+
+  {
+    id: fingerprint,
+    severity: severity,
+    primary_dimension: primary,
+    secondary_dimensions: [],
+    title: "#{warning['warning_type']}: #{(warning['message'] || '').split('.').first}".slice(0, 120),
+    location: line ? { file: file, line: line, line_range: [line, line] } : { file: file },
+    evidence: {
+      snippet: (warning['code'] || warning['message'] || '').to_s.strip,
+      normalized: "brakeman_#{warning['warning_type'].downcase.gsub(/\W+/, '_')}_#{file.gsub(/\W+/, '_')}_#{line || 0}"
+    },
+    explanation: "Brakeman #{warning['confidence']}-confidence #{warning['warning_type']} warning. #{warning['message']}",
+    fix_sketch: "Investigate and address; see Brakeman docs for #{warning['warning_type']}.",
+    time_estimate: severity == 'blocker' ? '1d' : (severity == 'high' ? '1h' : '5m'),
+    tool_origin: 'brakeman',
+    tool_warning_id: warning['fingerprint'] || warning['warning_code']&.to_s,
+    phase: severity == 'blocker' ? 1 : (severity == 'high' ? 2 : 5),
+    ignored: false,
+    self_check: { status: 'verified', notes: "Brakeman fingerprint #{warning['fingerprint']}" }
+  }
+end
+
+def render_table(stubs)
+  if stubs.empty?
+    puts 'No brakeman findings (after false-positive filter).'
+    return
+  end
+  rows = stubs.map { |s| [s[:severity].upcase, s[:title].slice(0, 60), s[:location][:file]] }
+  widths = [0, 1, 2].map { |i| [%w[Severity Title File][i].length, *rows.map { |r| r[i].to_s.length }].max }
+  fmt = widths.map { |w| "%-#{w}s" }.join('  ')
+  puts(format(fmt, 'Severity', 'Title', 'File'))
+  puts(widths.map { |w| '-' * w }.join('  '))
+  rows.each { |r| puts(format(fmt, *r)) }
+end
+
+def main(argv)
+  return puts(File.foreach(__FILE__).take(13).map { |l| l.sub(/^#\s?/, '') }.join) if argv.include?('--help') || argv.include?('-h')
+
+  table_mode = argv.delete('--table')
+  path = argv.first || DEFAULT_PATH
+
+  unless File.exist?(path)
+    warn "brakeman.json not found at #{path}. Run brakeman first: brakeman -q -f json -o #{path} ."
+    exit 2
+  end
+
+  json = JSON.parse(File.read(path))
+  warnings = parse_warnings(json)
+  stubs = warnings.map.with_index { |w, i| to_finding_stub(w, i) }
+
+  if table_mode
+    render_table(stubs)
+  else
+    puts JSON.pretty_generate(stubs)
+  end
+end
+
+main(ARGV.dup) if __FILE__ == $PROGRAM_NAME
