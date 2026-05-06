@@ -1,4 +1,4 @@
-# Lessons learned — building rails-audit v0.2 → v0.5
+# Lessons learned — building rails-audit v0.2 → v0.5.1
 
 This doc captures insights from building the v0.3 → v0.4 → v0.5 milestones that should outlive any single CHANGELOG entry. Each section is self-contained: context first, then the implication for future work.
 
@@ -130,6 +130,8 @@ Both v0.4 and v0.5's calibration moves (C7 override gate, C2 threshold bump, sev
 
 The discipline that should follow: every threshold and gate gets a `# calibrated against N=<count> projects` annotation in code, and a "validation needed at N=<3-5>" tracker issue. Calibrating with the answer in hand is fine for v0.5; it's not fine for v1.0.
 
+**Update (2026-05-05, post-pouch):** see §11 for the N=3 result — the gates discriminated correctly on a project the calibration wasn't tuned for. Two N=3 data points down; one or two more before "calibrated" is the right word.
+
 ## 10. The dogfood reports were syntheses, not real runs
 
 This is the load-bearing honesty note. The v0.4 and v0.5 "rerun" reports for influapp and coba were produced by a Python script (`/tmp/synthesize-v04.py`, since promoted to `bin/apply-inheritance` for the inheritance step only) that took the v0.2 JSON, added scanner output + parser stubs, and recomputed self-check. They demonstrate that the v0.4/v0.5 schema accommodates the new fields and that the inheritance/scoring math is correct.
@@ -141,9 +143,45 @@ What they do NOT prove:
 
 The fix for this — observing the skill's behavior on real `/rails-audit` invocations — needs to happen on a third project audit before any 1.0 talk.
 
+## 11. N=3 calibration validation — pouch (2026-05-05)
+
+Pouch (Rails 8.1.3 / Ruby 3.4.7 / Cloud Run / Devise+JWT, audited under `/rails-audit --standard`) was the first project where I had not pre-read the codebase before tuning thresholds. The result is the cleanest evidence so far that the v0.5 gates are doing real work.
+
+What fired and what did not:
+
+- **C3 (unverified blocker) caught a real agent hallucination.** Cluster B's security agent claimed `.env` was tracked in git. `git ls-files .env` returned 0 — the file exists locally with production Privy + DB credentials but is not in history. The finding stayed in `unverified_blockers[]`; in a live `/rails-audit` run, P7 would have prompted the user. *This is the first concrete evidence that the unverified-blocker check works on a project I had not seen before.*
+- **C7 (calibration override) correctly did not fire.** Conditions: 5 of 6 blockers verified (fails "all verified"), risk_score 4 (passes), only 5 dimensions ≤4 (deploy-and-ci, security-and-authz, reliability, background-jobs, data-governance — fails ≥6). Concentrated breakage profile, not broad systemic decay. C7's design intent — discriminate "concentrated breakage" from "broad decay" — held on a project the gate wasn't tuned for.
+- **C1 fired at the boundary** (41.4% high vs 40% threshold). With C7 not applying, this is exactly the case the hardened P7 prompt (PR#41) was built for — block / demote / accept. The dogfood report ships with `self_check.calibration.warnings[]` populated; live invocation would prompt.
+- **`blocker_pct` = 20.7%** — comfortably under the v0.5-bumped C2 threshold of 30% (raised from 25% specifically to absorb projects shaped like this).
+
+**Implication.** The discrimination C7 was designed for — concentrated breakage (one Phase 1 PR fixes most of it) versus broad systemic decay (every dimension is on fire) — actually works in the wild. influapp ≥6 dims ≤4 → applies. coba 5 dims ≤4 → doesn't. pouch 5 dims ≤4 → doesn't. Two confirms, one boundary case, no misfires.
+
+**What would change my confidence further.** A fourth project at the boundary (e.g., 6 or 7 dims ≤4, all blockers verified) where C7 fires for the first time on novel data. Or a project where C7 fires *and* the user disagrees — that's the real test.
+
+---
+
+## 12. The synthesizer can emit schema-invalid JSON
+
+While validating pouch's `report-2026-05-06.json` against `report.schema.json`, 7 errors appeared:
+
+- `audit.commit = "HEAD"` — should match `^[0-9a-f]{7,40}$`. The synthesizer wrote a literal git ref instead of resolving it to a hash.
+- 6 `findings[].time_estimate` values outside the enum (`30m`, `45m`, `20m`, `2h` — enum is `["5m", "1h", "1d", "1w", "1mo"]`).
+
+Both are synthesis-prompt issues, not schema design issues. The synthesizer (the Skill orchestrator turning agent output into the report JSON) was not enforcing:
+
+1. Resolve `audit.commit` via `git rev-parse --short=12 HEAD` before writing.
+2. Map free-form effort estimates (which are how engineers naturally think) into the enum bucket *before* writing, not after validation fails.
+
+**Implication for v0.5.2 or v0.6.** The synthesis step should validate against the schema *before* writing the file (in-memory validation pass), and surface validation failures as actionable repair prompts. The repair is mechanical — these aren't judgment calls. A pre-write validation gate prevents the user from ever seeing a malformed report.
+
+This is also a parser-side lesson: the existing `bin/parse-*` scripts do not emit `time_estimate` values (synthesis adds them downstream), so this gap lives in the synthesis prompt, not in the parsers. Fix likely belongs in `dimensions/_meta-synthesis.md` or wherever the per-finding output schema is anchored.
+
+---
+
 ## Pointers for future-me
 
 - All v0.4 schema additions documented in `CHANGELOG.md` under `[0.4.0]`. Same for v0.5 once it ships.
 - The benchmark-v02-vs-v04.md doc at `tmp/benchmark-v02-vs-v04.md` is the canonical "did the calibration work?" artifact for this milestone.
 - The inheritance-after-influapp dogfood JSON is at `tmp/rails-audit/report-2026-05-05-v0.5.json` in the influapp project. Compare to v0.4 to see the demotion in action.
 - The two real Rails projects used as dogfoods are in `~/workspace/workspace/influapp-api` (broad-defect example) and `~/workspace/workspace/coba` (concentrated-defect example). Both are good test beds for future calibration changes.
+- Third dogfood: `~/workspace/workspace/pouch` (concentrated-defect, modern stack — Rails 8.1.3 / Ruby 3.4.7). Audit JSON + markdown at `pouch/tmp/rails-audit/report-2026-05-06.{json,md}`. Use this when validating that gates discriminate on stacks without EOL drift.
