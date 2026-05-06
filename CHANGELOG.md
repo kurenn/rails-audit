@@ -4,6 +4,28 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-05-06
+
+Patch release that closes the gap surfaced by the pouch dogfood: the synthesizer could write reports containing schema-invalid `audit.commit = "HEAD"` and non-enum `time_estimate` values without catching them before `File.write`. Lessons-learned §12 has the post-mortem.
+
+### Added
+
+- **`bin/validate-report`** — pre-write gate for the report JSON. Wraps `json_schemer` plus extra "synthesis-pattern" sanity checks that surface friendlier errors than raw schema violations:
+  - `audit.commit = "HEAD"` → hint to use `git rev-parse --short=12 HEAD`.
+  - `time_estimate` not in the enum → hint about the round-up convention (`30m` → `1h`, `2h` → `1d`).
+  - Cross-references that point to non-existent finding ids (`fix_sequence.finding_ids`, `summary.top_blocker_ids`, `severity_inherited_from`, `self_check.{verified,unverified}_blockers`).
+  - `top_blocker_ids` pointing at non-blocker findings.
+  - Stdin-friendly (`bin/validate-report -`) so the synthesizer can pipe in-memory JSON through it before writing to disk.
+- **6 new `bin/test-parsers` checks** for `validate-report`: valid minimal report passes, the pouch-shaped failure (HEAD commit + 30m time_estimate) is caught with both schema and sanity tags, cross-ref consistency is enforced. 19 → 25 checks total.
+
+### Changed
+
+- **`SKILL.md` Step 7 (write outputs)** — now mandates running `bin/validate-report -` on the in-memory report before `File.write`. If validation fails, the synthesizer must repair and re-validate; do not write a known-invalid report.
+
+### What didn't change
+
+No schema changes. v0.5.1 and v0.6+ reports both validate under the new gate without modification. Schema additivity discipline preserved.
+
 ## [0.5.1] — 2026-05-06
 
 Honest-version patch release. Fixes three classes of gap surfaced by a self-rating exercise.
@@ -329,7 +351,8 @@ Initial release.
 - Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
 - Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
 
-[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/kurenn/rails-audit/releases/tag/v0.5.2
 [0.5.1]: https://github.com/kurenn/rails-audit/releases/tag/v0.5.1
 [0.5.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.4.0

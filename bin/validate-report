@@ -1,0 +1,185 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/validate-report — pre-write gate for /rails-audit's report JSON.
+#
+# Usage:
+#   bin/validate-report <report.json>     # validate file at path
+#   bin/validate-report -                  # validate JSON read from stdin
+#   bin/validate-report --help
+#
+# Exits 0 if the report is valid. Exits 2 with a punch list to stderr if
+# any violation is found.
+#
+# What it checks (in order):
+#
+#   1. JSON parses.
+#   2. Schema validation (skills/rails-audit/schema/report.schema.json).
+#   3. "Synthesizer-pattern" sanity checks above-and-beyond the schema:
+#      - audit.commit must be a real hex hash (the schema regex catches
+#        this, but we surface a friendlier error pointing at the
+#        common synthesis mistake of writing "HEAD" verbatim).
+#      - findings[].time_estimate values not in the enum get a hint
+#        about the rounding convention (round UP to the next bucket).
+#      - findings[].id matches the fingerprint pattern (re-checks the
+#        schema constraint to give a clearer error).
+#      - any internal cross-reference (severity_inherited_from,
+#        fix_sequence.finding_ids, top_blocker_ids, verified_blockers)
+#        points to a finding that exists in the report.
+#
+# Why this script exists:
+#
+#   The pouch dogfood (lessons-learned §12) found that the synthesizer
+#   could write reports that contained `audit.commit = "HEAD"` and
+#   `time_estimate = "30m"` — both schema-invalid. The fix is to validate
+#   in-memory before File.write, and surface friendly errors when the
+#   synthesizer mistypes one of these well-known fields.
+
+require 'json'
+require 'optparse'
+require 'set'
+
+ROOT_DIR    = File.expand_path('..', __dir__)
+SCHEMA_PATH = File.join(ROOT_DIR, 'skills', 'rails-audit', 'schema', 'report.schema.json')
+
+options = { quiet: false, help: false }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: bin/validate-report <report.json|->\n\n" \
+                'Validate a /rails-audit report against the schema + synthesis sanity checks.'
+  opts.on('-q', '--quiet', 'Only print violations on failure') { options[:quiet] = true }
+  opts.on('-h', '--help',  'Show this help') { options[:help] = true }
+end
+parser.parse!
+
+if options[:help] || ARGV.empty?
+  puts parser
+  exit(options[:help] ? 0 : 1)
+end
+
+source = ARGV.first
+text =
+  if source == '-'
+    $stdin.read
+  else
+    abort "ERR: report not found: #{source}" unless File.exist?(source)
+    File.read(source)
+  end
+
+# 1. JSON parse ----------------------------------------------------
+begin
+  report = JSON.parse(text)
+rescue JSON::ParserError => e
+  warn "[validate-report] JSON parse failed: #{e.message[0, 200]}"
+  exit 2
+end
+
+# 2. Schema validation --------------------------------------------
+begin
+  require 'json_schemer'
+rescue LoadError
+  warn "[validate-report] requires the 'json_schemer' gem (gem install json_schemer)"
+  exit 3
+end
+
+schema = JSON.parse(File.read(SCHEMA_PATH))
+schemer = JSONSchemer.schema(schema)
+schema_errors = schemer.validate(report).to_a
+
+# 3. Synthesis sanity checks (friendlier than raw schema errors) ---
+extra_errors = []
+
+# --- audit.commit must be hex
+audit_commit = report.dig('audit', 'commit')
+case audit_commit
+when nil
+  extra_errors << '/audit/commit: missing — set to `git rev-parse --short=12 HEAD`'
+when 'HEAD', 'head'
+  extra_errors << '/audit/commit: literal "HEAD" — resolve via `git rev-parse --short=12 HEAD` and pass the hex hash'
+end
+
+# --- time_estimate enum check with rounding hint
+TIME_ENUM = %w[5m 1h 1d 1w 1mo].freeze
+TIME_HINT = {
+  /\A\d+m\z/  => '< 1h → use "1h" (round up to nearest enum bucket)',
+  /\A\d+h\z/  => '> 1h but < 1d → use "1d" (round up); use "1h" only for ≤ 60m',
+  /\A\d+d\z/  => 'days → use "1d" or "1w" depending on scope',
+  /\A\d+w\z/  => 'weeks → use "1w" or "1mo"'
+}.freeze
+(report['findings'] || []).each_with_index do |f, i|
+  v = f['time_estimate']
+  next if v.nil? || TIME_ENUM.include?(v)
+  hint = TIME_HINT.find { |re, _| v =~ re }&.last || "must be one of: #{TIME_ENUM.join(', ')}"
+  extra_errors << "/findings/#{i}/time_estimate: #{v.inspect} — #{hint}"
+end
+
+# --- finding-id pattern (re-check with a friendlier error)
+FINGERPRINT_RE = /\Af-[0-9a-f]{12,64}\z/.freeze
+known_ids = []
+(report['findings'] || []).each_with_index do |f, i|
+  id = f['id']
+  if id.is_a?(String) && id =~ FINGERPRINT_RE
+    known_ids << id
+  else
+    extra_errors << "/findings/#{i}/id: #{id.inspect} — must match /^f-[0-9a-f]{12,64}$/ (use SHA256 truncated to ≥12 hex chars)"
+  end
+end
+known_ids_set = Set.new(known_ids)
+
+# --- cross-references must resolve
+def collect_refs(report, &blk)
+  (report['findings'] || []).each_with_index do |f, i|
+    if (parent = f['severity_inherited_from'])
+      yield parent, "/findings/#{i}/severity_inherited_from"
+    end
+  end
+  (report['fix_sequence'] || []).each_with_index do |phase, i|
+    (phase['finding_ids'] || []).each_with_index do |fid, j|
+      yield fid, "/fix_sequence/#{i}/finding_ids/#{j}"
+    end
+  end
+  (report.dig('summary', 'top_blocker_ids') || []).each_with_index do |fid, i|
+    yield fid, "/summary/top_blocker_ids/#{i}"
+  end
+  (report.dig('self_check', 'verified_blockers') || []).each_with_index do |fid, i|
+    yield fid, "/self_check/verified_blockers/#{i}"
+  end
+  (report.dig('self_check', 'unverified_blockers') || []).each_with_index do |fid, i|
+    yield fid, "/self_check/unverified_blockers/#{i}"
+  end
+end
+
+collect_refs(report) do |fid, where|
+  unless known_ids_set.include?(fid)
+    extra_errors << "#{where}: refers to unknown finding id #{fid.inspect}"
+  end
+end
+
+# --- top_blocker_ids must point to actual blockers
+sev_by_id = (report['findings'] || []).each_with_object({}) { |f, h| h[f['id']] = f['severity'] }
+(report.dig('summary', 'top_blocker_ids') || []).each_with_index do |fid, i|
+  sev = sev_by_id[fid]
+  if sev && sev != 'blocker'
+    extra_errors << "/summary/top_blocker_ids/#{i}: finding #{fid} has severity #{sev.inspect} (expected 'blocker')"
+  end
+end
+
+# --- skill_version, schema_version sanity
+unless report['schema_version'] == 2
+  extra_errors << "/schema_version: must be 2 (got #{report['schema_version'].inspect})"
+end
+unless report['skill_version'].is_a?(String) && report['skill_version'] =~ /\A\d+\.\d+\.\d+/
+  extra_errors << "/skill_version: must be a semver string (got #{report['skill_version'].inspect})"
+end
+
+# Report --------------------------------------------------------------
+all_errors = schema_errors.map { |e| "[schema] #{e['data_pointer']}: #{e['error']}" } +
+             extra_errors.map { |e| "[sanity] #{e}" }
+
+if all_errors.empty?
+  warn "[validate-report] OK — #{report['findings']&.size || 0} findings, #{report['fix_sequence']&.size || 0} phases" unless options[:quiet]
+  exit 0
+else
+  warn "[validate-report] #{all_errors.size} violation(s):"
+  all_errors.each { |e| warn "  #{e}" }
+  exit 2
+end

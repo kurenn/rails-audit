@@ -387,6 +387,14 @@ Apply `output-template.md` to the JSON from Step 4 (now possibly mutated by Step
 
 ### Step 7 (was 6). Write outputs
 
+**Pre-write validation gate (added v0.5.2).** Before writing the JSON to disk, validate it via `bin/validate-report -` (stdin). If validation fails, **repair the in-memory report and re-validate**; do not write a known-invalid report. Common failures the validator surfaces:
+
+- `audit.commit = "HEAD"` — resolve via `git rev-parse --short=12 HEAD` and use the hex hash.
+- `findings[].time_estimate` outside the enum (`5m`, `1h`, `1d`, `1w`, `1mo`) — round UP to the next bucket (`30m` → `1h`; `2h` → `1d`).
+- Cross-references (`fix_sequence.finding_ids`, `summary.top_blocker_ids`, `severity_inherited_from`, `self_check.{verified,unverified}_blockers`) pointing to non-existent finding ids — synthesis-time copy-paste mistake.
+
+The validator exits 0 on a clean report; 2 with a stderr punch list otherwise. See `bin/validate-report --help` for what gets checked. Lessons-learned §12 has the post-mortem on why this gate exists (pouch's first end-to-end synthesis emitted both `"HEAD"` and `"30m"` and would have shipped them without manual catch).
+
 Save the structured JSON + rendered markdown to `tmp/rails-audit/`. Filename pattern: `report-YYYY-MM-DD`. Use today's actual date.
 
 **Single-file mode** (default — when rendered markdown is < 30 KB):
