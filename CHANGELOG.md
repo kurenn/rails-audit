@@ -4,6 +4,37 @@ All notable changes to this skill are documented in this file. Format follows [K
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-05-06
+
+Honest-version patch release. Fixes three classes of gap surfaced by a self-rating exercise.
+
+### Fixed
+
+- **Parser fingerprints didn't match the schema regex.** `bin/parse-brakeman`, `bin/parse-bundle-audit`, and `bin/scan-secrets` were emitting ids like `f-bk-0001-1a52` and `f-secret-0001-96d` — the schema requires `^f-[0-9a-f]{12,64}$` (pure hex). Replaced all three with `f-` + first 16 hex of `SHA256(seed)`. Stable across runs (good for trend); schema-compliant.
+- **`Regexp.last_match` clobber regression check.** The bug documented in `docs/lessons-learned.md` is now caught by `bin/test-parsers`'s "record values populated (not nil)" check on `parse-bundle-audit`. Future parsers will fail loudly if they hit the same gotcha.
+
+### Added
+
+- **`bin/test-parsers`** smoke test runner with 19 checks across all 5 parser scripts. Validates: exit 0, valid JSON output, fingerprint regex match, severity tier match, false-positive filtering (Open3 array form), aggregate `total` populated. Fixtures under `test/fixtures/`.
+- **`bin/apply-inheritance`** promoted into the repo from `/tmp/apply-inheritance.py` (rewritten in Ruby for consistency with the other `bin/*` scripts). Reproduces the v0.5 dogfood demotion on influapp v0.4 → v0.5: 51 demoted, blocker_pct 26.8% → 11.3%, high_pct 62.9% → 42.3%.
+
+### Documented
+
+- **README.md `## Calibration status — honest version`** section. Loud disclosure that:
+  - Schema and parsers are well-tested across 4 minor versions.
+  - C7 override thresholds, C2 30% threshold, and inheritance roster were tuned with the influapp + coba data already in hand. N=2 calibration. **A third project may push back on any of those numbers.**
+  - The v0.4/v0.5 dogfood reports were synthesized from v0.2 + parser outputs, NOT produced by fresh end-to-end agent runs. The "10× cost reduction" for `--continue` is an estimate, not a measurement.
+  - Several v0.4-v0.5 features (hardened block, `--continue`, `--track-renames`, multi-file output, install-hooks pre-commit) are documented contracts but not observed firing on real audits.
+- **`docs/lessons-learned.md`** sections 9 and 10: "Calibration on N=2 isn't calibration" and "The dogfood reports were syntheses, not real runs."
+
+### Triaged
+
+- **v0.6 milestone PRs #2-#5 closed as `not planned`** with comment: "deferring until PR#1 (MVP) is dogfooded against a real project." The MVP (#65) stays open as the canonical scope for the next iteration. This reduces the paper-plan maintenance burden noted in the self-rating.
+
+### What didn't change
+
+No behavioral changes to the audit pipeline. Schema is unchanged from 0.5.0. v0.5 reports validate identically.
+
 ## [0.5.0] — 2026-05-05
 
 Calibration round 2 driven by the v0.2→v0.4 benchmark on influapp + coba. Six PRs across calibration, parser completion, and pre-commit integration.
@@ -298,7 +329,8 @@ Initial release.
 - Static tool invocation pattern: skill orchestrates `brakeman`, `bundler-audit`, `rubocop`, `reek`, `rails_best_practices`, `flog`, `flay`, `simplecov`, `rubycritic` and synthesizes findings — never re-implements detection.
 - Severity-first synthesis: deduplicate across clusters, apply rubric strictly, sequence fixes so each phase unblocks the next.
 
-[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/kurenn/rails-audit/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/kurenn/rails-audit/releases/tag/v0.5.1
 [0.5.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/kurenn/rails-audit/releases/tag/v0.3.0

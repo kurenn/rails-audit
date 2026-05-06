@@ -204,6 +204,40 @@ See [`skills/rails-audit/rubric.md`](skills/rails-audit/rubric.md) for full defi
 
 See [`skills/rails-audit/examples/sample-report.md`](skills/rails-audit/examples/sample-report.md) for a redacted real-world report.
 
+## Calibration status — honest version
+
+The audit pipeline (workflow, dimensions, schema) and the four supporting skill versions (v0.2 → v0.5) have been built and tested across **two real Rails projects** (influapp + coba). What that does and doesn't mean:
+
+**What's well-supported by real data**
+
+- The **schema is stable** across v0.2 → v0.5 (4 minor versions of additive changes; v0.2 reports validate clean against v0.5).
+- The **parsers** (`bin/parse-brakeman`, `bin/parse-bundle-audit`, `bin/parse-rubocop`, `bin/parse-reek`, `bin/parse-rails-best-practices`, `bin/scan-secrets`) have a fixture-backed test suite (`bin/test-parsers`, 19 checks) that catches bugs like the `Regexp.last_match`-clobber issue documented in `docs/lessons-learned.md`.
+- **Severity inheritance** for EOL CVEs has been validated on influapp (51 of 64 bundle-audit findings demoted; `blocker_pct` dropped from 26.8% → 11.3%) and the inheritance roster has been deliberately conservative (only Rails-bundled and Ruby-adjacent gems).
+
+**What's tuned with the answer in hand**
+
+- The **C7 real-distribution override** thresholds (≥6 dimensions ≤4 + `risk_score ≤ 4` + verified blockers) were chosen *after* observing influapp's profile (12 dimensions ≤4) and coba's (5 dimensions ≤4). C7 was designed to make influapp clear and coba block. **A third real-project audit could push back on any of those numbers.**
+- The **C2 threshold (30%)** was bumped from 25% specifically because coba's secrets-scanner-produced 29.4% blockers tripped the older threshold. Same pattern: tuned to known data.
+- The **token-cost heuristic** in `dimensions/cost-estimation.md` has worked-example calibration only on the influapp v0.1 actual run (~52K input). Other modes' estimates are derivations from that single anchor.
+
+**What hasn't been observed firing on a real run**
+
+Several v0.4-v0.5 features are documented contracts but were not exercised end-to-end against an actual `/rails-audit --standard` invocation in this project's history:
+
+- The hardened block (P7 `block`/`demote`/`accept` flow)
+- `--continue` / `--from-findings` mode (the cited "10× cost reduction" is an estimate, not a measurement)
+- `--track-renames` for trend
+- Multi-file output (the 30 KB threshold has not been crossed by any real audit yet)
+- The pre-commit hook from `bin/install-hooks` (smoke-tested via `--dry-run` only)
+
+The v0.4 and v0.5 dogfood reports for influapp and coba (under `tmp/rails-audit/report-2026-05-05-v0.4.json` and `-v0.5.json` in those projects) were **synthesized from the v0.2 baseline + tool outputs**, not produced by fresh agent fan-out. The numbers are informative for design validation but do not constitute end-to-end test evidence.
+
+**What that means for you**
+
+If you're using this skill on a project: treat the v0.5 calibration thresholds as a starting point, not a final answer. Run the audit, look at the self-check output, and if C1/C7 fires in a way that feels wrong (e.g., your project genuinely has 8 dimensions ≤4 but the override doesn't apply), open an issue with your `report.json` attached. That's how the thresholds get to a 1.0-worthy state.
+
+The `docs/lessons-learned.md` doc captures more of the build's hard-won insights, including the bugs that were caught and the design questions that didn't have a single right answer.
+
 ## Contributing
 
 Issues and PRs welcome — especially:

@@ -1,0 +1,35 @@
+Updating ruby-advisory-db ...
+Already up to date.
+Updated ruby-advisory-db
+ruby-advisory-db:
+  advisories:	1078 advisories
+  last updated:	2026-03-30 08:43:42 -0700
+  commit:	abc123
+
+Name: actionpack
+Version: 7.0.4
+CVE: CVE-2023-22792
+GHSA: GHSA-fixture-001
+Criticality: High
+URL: https://example.com/cve-2023-22792
+Title: ReDoS in actionpack route processing
+Solution: update to >= 7.0.4.1
+
+Name: uri
+Version: 0.13.0
+CVE: CVE-2025-27221
+GHSA: GHSA-fixture-002
+Criticality: Medium
+URL: https://example.com/cve-2025-27221
+Title: userinfo leakage in URI#join
+Solution: update to >= 1.0.4
+
+Name: thor
+Version: 1.2.0
+GHSA: GHSA-fixture-003
+Criticality: Low
+URL: https://example.com/ghsa-fixture-003
+Title: Unsafe shell construction
+Solution: update to >= 1.4.0
+
+Vulnerabilities found!

@@ -13,6 +13,7 @@
 # Filters known false positives (array-form Open3 — argv, no shell).
 
 require 'json'
+require 'digest'
 
 DEFAULT_PATH = 'tmp/rails-audit/brakeman.json'
 
@@ -71,8 +72,8 @@ def to_finding_stub(warning, idx)
 
   file = warning['file'] || ''
   line = warning['line']
-  fp_seed = "#{primary}|#{file}|#{warning['warning_type']}|#{(warning['code'] || '').strip[0, 80]}"
-  fingerprint = "f-bk-#{format('%04d', idx + 1)}-#{fp_seed.sum.to_s(16)[0..7]}"
+  fp_seed = "brakeman|#{primary}|#{file}|#{warning['warning_type']}|#{(warning['code'] || '').strip[0, 80]}"
+  fingerprint = "f-#{Digest::SHA256.hexdigest(fp_seed)[0, 16]}"
 
   {
     id: fingerprint,

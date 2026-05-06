@@ -1,0 +1,29 @@
+{
+  "metadata": {
+    "rubocop_version": "1.74.0",
+    "ruby_engine": "ruby",
+    "ruby_version": "3.1.2"
+  },
+  "files": [
+    {
+      "path": "app/models/user.rb",
+      "offenses": [
+        { "severity": "convention", "message": "...", "cop_name": "Style/StringLiterals", "corrected": false, "correctable": true, "location": { "start_line": 1, "start_column": 1, "last_line": 1, "last_column": 1, "length": 1, "line": 1, "column": 1 } },
+        { "severity": "convention", "message": "...", "cop_name": "Layout/LineLength",   "corrected": false, "correctable": true, "location": { "start_line": 5, "start_column": 1, "last_line": 5, "last_column": 1, "length": 1, "line": 5, "column": 1 } },
+        { "severity": "warning",    "message": "...", "cop_name": "Lint/UselessAssignment", "corrected": false, "correctable": false, "location": { "start_line": 10, "start_column": 1, "last_line": 10, "last_column": 1, "length": 1, "line": 10, "column": 1 } }
+      ]
+    },
+    {
+      "path": "app/controllers/users_controller.rb",
+      "offenses": [
+        { "severity": "convention", "message": "...", "cop_name": "Style/StringLiterals", "corrected": false, "correctable": true,  "location": { "start_line": 2, "start_column": 1, "last_line": 2, "last_column": 1, "length": 1, "line": 2, "column": 1 } },
+        { "severity": "convention", "message": "...", "cop_name": "Style/Documentation",  "corrected": false, "correctable": false, "location": { "start_line": 1, "start_column": 1, "last_line": 1, "last_column": 1, "length": 1, "line": 1, "column": 1 } }
+      ]
+    }
+  ],
+  "summary": {
+    "offense_count": 5,
+    "target_file_count": 2,
+    "inspected_file_count": 2
+  }
+}

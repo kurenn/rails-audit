@@ -1,0 +1,31 @@
+[
+  {
+    "context": "User#full_name",
+    "lines": [12, 13, 14],
+    "message": "talks to too many objects",
+    "smell_type": "FeatureEnvy",
+    "source": "app/models/user.rb",
+    "documentation_link": "https://example.com/feature-envy"
+  },
+  {
+    "context": "User#process",
+    "lines": [42],
+    "message": "has too many parameters",
+    "smell_type": "LongParameterList",
+    "source": "app/models/user.rb"
+  },
+  {
+    "context": "PaymentService#call",
+    "lines": [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101],
+    "message": "has approx 22 statements",
+    "smell_type": "LongMethod",
+    "source": "app/services/payment_service.rb"
+  },
+  {
+    "context": "PaymentService",
+    "lines": [10, 25],
+    "message": "has irresponsible methods",
+    "smell_type": "IrresponsibleModule",
+    "source": "app/services/payment_service.rb"
+  }
+]

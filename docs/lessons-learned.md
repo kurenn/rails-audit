@@ -120,6 +120,27 @@ In rough order of difficulty:
 
 ---
 
+## 9. Calibration on N=2 isn't calibration
+
+Both v0.4 and v0.5's calibration moves (C7 override gate, C2 threshold bump, severity inheritance roster) were tuned with the influapp + coba audit data already in hand. That means:
+
+- C7's three-condition gate was specifically chosen so influapp would clear (12 dimensions ≤4 hits ≥6) and coba would block (only 5 ≤4 misses ≥6). On a third project, the gate may misfire.
+- C2's 30% threshold bump was triggered by coba's 29.4% real blockers. On a project with 35% real blockers, we'd hit the same paradox.
+- The inheritance roster (Rails-bundled + Ruby-adjacent gems) is conservative, but it's tuned for the kind of EOL Rails project influapp is. Different stacks may need different rosters.
+
+The discipline that should follow: every threshold and gate gets a `# calibrated against N=<count> projects` annotation in code, and a "validation needed at N=<3-5>" tracker issue. Calibrating with the answer in hand is fine for v0.5; it's not fine for v1.0.
+
+## 10. The dogfood reports were syntheses, not real runs
+
+This is the load-bearing honesty note. The v0.4 and v0.5 "rerun" reports for influapp and coba were produced by a Python script (`/tmp/synthesize-v04.py`, since promoted to `bin/apply-inheritance` for the inheritance step only) that took the v0.2 JSON, added scanner output + parser stubs, and recomputed self-check. They demonstrate that the v0.4/v0.5 schema accommodates the new fields and that the inheritance/scoring math is correct.
+
+What they do NOT prove:
+- That `/rails-audit --standard` on a fresh checkout actually produces these JSON shapes when invoked end-to-end via the Skill tool.
+- That `--continue` mode actually costs ~5K tokens. That number is an estimate; the actual harness-exposed token count was never recorded.
+- That the hardened block (PR#41) actually invokes prompt P7 and waits for input. The flow is documented; it has not been observed live.
+
+The fix for this — observing the skill's behavior on real `/rails-audit` invocations — needs to happen on a third project audit before any 1.0 talk.
+
 ## Pointers for future-me
 
 - All v0.4 schema additions documented in `CHANGELOG.md` under `[0.4.0]`. Same for v0.5 once it ships.
