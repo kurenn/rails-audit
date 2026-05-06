@@ -325,6 +325,12 @@
           "type": "string",
           "pattern": "^f-[0-9a-f]{12,64}$",
           "description": "When set, this finding is a consequence of the cited root-cause finding (e.g., a CVE inherited from EOL Rails). Severity has been demoted by one tier from its raw value; the trend tracks the root finding's lifecycle. Added v0.5."
+        },
+        "issue_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://github\\.com/[^/]+/[^/]+/issues/\\d+$",
+          "description": "GitHub issue URL where this finding (or its parent phase) is being tracked. Populated by bin/file-issues. Idempotent re-runs match by fingerprint footer in issue body. Added v0.6."
         }
       }
     },
