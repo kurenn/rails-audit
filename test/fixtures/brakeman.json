@@ -1,0 +1,51 @@
+{
+  "scan_info": {
+    "app_path": "/fixture",
+    "rails_version": "7.0.4",
+    "ruby_version": "3.1.2"
+  },
+  "warnings": [
+    {
+      "warning_type": "Command Injection",
+      "warning_code": 14,
+      "fingerprint": "fixture-cmd-injection-real",
+      "message": "Possible command injection",
+      "file": "lib/runner.rb",
+      "line": 42,
+      "code": "`#{user_input}`",
+      "confidence": "Medium"
+    },
+    {
+      "warning_type": "Command Injection",
+      "warning_code": 14,
+      "fingerprint": "fixture-cmd-injection-fp",
+      "message": "Possible command injection",
+      "file": "lib/runner.rb",
+      "line": 50,
+      "code": "Open3.capture3(\"ffmpeg\", \"-i\", src_path)",
+      "confidence": "Medium"
+    },
+    {
+      "warning_type": "Unmaintained Dependency",
+      "warning_code": 130,
+      "fingerprint": "fixture-eol-rails",
+      "message": "Support for Rails 7.0.4 ended on 2025-04-01",
+      "file": "Gemfile.lock",
+      "line": 1,
+      "code": "rails (7.0.4)",
+      "confidence": "High"
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "fixture-sqli",
+      "message": "Possible SQL injection",
+      "file": "app/models/user.rb",
+      "line": 100,
+      "code": "User.where(\"name = '#{params[:q]}'\")",
+      "confidence": "High"
+    }
+  ],
+  "ignored_warnings": [],
+  "errors": []
+}

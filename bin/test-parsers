@@ -1,0 +1,182 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/test-parsers — smoke-test the parse-* scripts against fixtures.
+#
+# Usage:
+#   bin/test-parsers              # run all parsers; exit 1 on any failure
+#   bin/test-parsers --verbose
+#
+# Validates:
+#   - script runs to completion (exit 0)
+#   - output is valid JSON
+#   - finding-stub parsers (brakeman, bundle-audit) produce findings whose
+#     id matches the schema's fingerprint regex
+#   - aggregate parsers (rubocop, reek, rails-best-practices) produce a
+#     non-zero `total` field
+#   - severity values come from the rubric's 4-tier set
+#
+# This catches the class of silent bugs that would otherwise ship
+# (e.g., the v0.5 `Regexp.last_match` clobber that produced 0 findings).
+
+require 'json'
+require 'open3'
+
+ROOT = File.expand_path('..', __dir__)
+FIXTURES = File.join(ROOT, 'test', 'fixtures')
+BIN = File.join(ROOT, 'bin')
+
+VERBOSE = ARGV.include?('--verbose')
+
+FINGERPRINT_RE = /\Af-[0-9a-f]{12,64}\z/.freeze
+VALID_SEVERITY = %w[blocker high medium low].freeze
+PASS = "\e[32mPASS\e[0m"
+FAIL = "\e[31mFAIL\e[0m"
+
+failures = 0
+checks   = 0
+
+def check(name, condition, detail = nil)
+  global = binding.local_variables.include?(:failures) ? :ok : :ok
+  passed = !!condition
+  marker = passed ? "\e[32mPASS\e[0m" : "\e[31mFAIL\e[0m"
+  msg    = "  [#{marker}] #{name}"
+  msg += " — #{detail}" if !passed && detail
+  puts msg
+  passed
+end
+
+def run(label, *cmd)
+  out, err, status = Open3.capture3(*cmd)
+  unless status.success?
+    puts "  [\e[31mFAIL\e[0m] #{label} — exit #{status.exitstatus}: #{err.strip[0, 200]}"
+    return nil
+  end
+  begin
+    JSON.parse(out)
+  rescue JSON::ParserError => e
+    puts "  [\e[31mFAIL\e[0m] #{label} — output is not valid JSON: #{e.message[0, 100]}"
+    nil
+  end
+end
+
+# ---------------------------------------------------------------------------
+puts "Testing parsers against #{FIXTURES}"
+puts ''
+
+# --- parse-brakeman --------------------------------------------------------
+puts 'parse-brakeman:'
+data = run('runs + emits JSON', File.join(BIN, 'parse-brakeman'),
+                                File.join(FIXTURES, 'brakeman.json'))
+if data
+  checks += 1
+  passed = data.is_a?(Array)
+  failures += 1 unless check('output is array', passed)
+  checks += 1
+  passed = data.size >= 2 # we have 4 in fixture, parser filters 1 false positive → 3
+  failures += 1 unless check("array has >= 2 items (got #{data.size})", passed)
+  if data.any?
+    f = data.first
+    checks += 1
+    failures += 1 unless check("finding id matches f-[hex]{12+}", f['id'] =~ FINGERPRINT_RE,
+                               "got #{f['id']}")
+    checks += 1
+    failures += 1 unless check("severity in rubric tier", VALID_SEVERITY.include?(f['severity']),
+                               "got #{f['severity']}")
+    checks += 1
+    failures += 1 unless check('false-positive Open3 array form filtered',
+                               data.none? { |x| (x['evidence']['snippet'] || '').include?('Open3.capture3("ffmpeg"') },
+                               'fixture had array-form Open3 — should be filtered')
+  end
+else
+  failures += 1
+end
+puts ''
+
+# --- parse-bundle-audit ----------------------------------------------------
+puts 'parse-bundle-audit:'
+data = run('runs + emits JSON', File.join(BIN, 'parse-bundle-audit'),
+                                File.join(FIXTURES, 'bundle-audit.txt'))
+if data
+  checks += 1
+  failures += 1 unless check('output is array', data.is_a?(Array))
+  checks += 1
+  failures += 1 unless check("found 3 advisories (got #{data.size})", data.size == 3)
+  if data.any?
+    f = data.first
+    checks += 1
+    failures += 1 unless check('finding id matches fingerprint regex',
+                               f['id'] =~ FINGERPRINT_RE, "got #{f['id']}")
+    checks += 1
+    failures += 1 unless check('record values populated (not nil — gsub bug regression check)',
+                               f['title'] && !f['title'].empty? &&
+                                 f['evidence']['snippet'] && !f['evidence']['snippet'].empty?,
+                               "title=#{f['title'].inspect}")
+    checks += 1
+    failures += 1 unless check('Criticality:High → severity=blocker',
+                               data.find { |x| x['tool_warning_id'] == 'CVE-2023-22792' }&.dig('severity') == 'blocker')
+    checks += 1
+    failures += 1 unless check('Criticality:Medium → severity=high',
+                               data.find { |x| x['tool_warning_id'] == 'CVE-2025-27221' }&.dig('severity') == 'high')
+    checks += 1
+    failures += 1 unless check('Criticality:Low → severity=medium',
+                               data.find { |x| x['tool_warning_id'] == 'GHSA-fixture-003' }&.dig('severity') == 'medium')
+  end
+else
+  failures += 1
+end
+puts ''
+
+# --- parse-rubocop ---------------------------------------------------------
+puts 'parse-rubocop:'
+data = run('runs + emits JSON', File.join(BIN, 'parse-rubocop'),
+                                File.join(FIXTURES, 'rubocop.json'))
+if data
+  checks += 1
+  failures += 1 unless check("aggregate total = 5 (got #{data['total']})", data['total'] == 5)
+  checks += 1
+  failures += 1 unless check('by_severity has convention',
+                             data['by_severity'].is_a?(Hash) && data['by_severity']['convention'] == 4)
+  checks += 1
+  failures += 1 unless check('top_categories contains StringLiterals',
+                             (data['top_categories'] || []).any? { |c| c.include?('StringLiterals') })
+else
+  failures += 1
+end
+puts ''
+
+# --- parse-reek ------------------------------------------------------------
+puts 'parse-reek:'
+data = run('runs + emits JSON', File.join(BIN, 'parse-reek'),
+                                File.join(FIXTURES, 'reek.json'))
+if data
+  checks += 1
+  failures += 1 unless check("aggregate total = 4 (got #{data['total']})", data['total'] == 4)
+  checks += 1
+  failures += 1 unless check('top_smells lists FeatureEnvy + LongMethod',
+                             (data['top_smells'] || []).any? { |s| s['type'] == 'FeatureEnvy' } &&
+                               (data['top_smells'] || []).any? { |s| s['type'] == 'LongMethod' })
+else
+  failures += 1
+end
+puts ''
+
+# --- parse-rails-best-practices --------------------------------------------
+puts 'parse-rails-best-practices:'
+data = run('runs + emits JSON', File.join(BIN, 'parse-rails-best-practices'),
+                                File.join(FIXTURES, 'rails-best-practices.json'))
+if data
+  checks += 1
+  failures += 1 unless check("aggregate total = 4 (got #{data['total']})", data['total'] == 4)
+  checks += 1
+  failures += 1 unless check('top_checks captures law of demeter',
+                             (data['top_checks'] || []).any? { |c| c['check'].include?('law of demeter') })
+else
+  failures += 1
+end
+puts ''
+
+# ---------------------------------------------------------------------------
+puts '---'
+puts "#{checks - failures}/#{checks} checks passed"
+exit(failures.zero? ? 0 : 1)

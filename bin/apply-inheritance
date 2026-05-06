@@ -1,0 +1,115 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/apply-inheritance — apply Step 4.7 severity inheritance to a v0.4+ JSON report.
+#
+# Usage:
+#   bin/apply-inheritance <input.json> <output.json>
+#   bin/apply-inheritance --help
+#
+# When N findings are consequences of one root-cause finding (e.g., 64
+# bundle-audit CVEs all inherited from EOL Rails), demote each by one
+# tier and link them via severity_inherited_from.
+#
+# See dimensions/severity-inheritance.md for the detection rules and
+# the conservative gem roster.
+
+require 'json'
+
+ROSTER = {
+  # Rails-bundled gems
+  'rails' => true, 'railties' => true, 'actionmailer' => true,
+  'actionmailbox' => true, 'actionpack' => true, 'actionview' => true,
+  'actiontext' => true, 'actioncable' => true, 'activerecord' => true,
+  'activemodel' => true, 'activestorage' => true, 'activejob' => true,
+  'activesupport' => true, 'sprockets-rails' => true,
+  # Ruby/Rails-adjacent
+  'rack' => true, 'rack-test' => true, 'nokogiri' => true, 'loofah' => true,
+  'sanitize' => true, 'mail' => true, 'json' => true, 'uri' => true,
+  'rexml' => true, 'cgi' => true, 'openssl' => true,
+  # Build-chain
+  'bundler' => true, 'thor' => true, 'rake' => true
+}.freeze
+
+DEMOTE = { 'blocker' => 'high', 'high' => 'medium', 'medium' => 'low', 'low' => 'low' }.freeze
+
+def gem_from_finding(f)
+  title = f['title'] || ''
+  m = title.match(/Vulnerable dependency:\s*(\S+)/)
+  m && m[1].downcase
+end
+
+def find_root_cause(findings)
+  findings.find { |f| f['tool_warning_id'] == 'unmaintained_dependency' } ||
+    findings.find { |f| f['primary_dimension'] == 'foundation' && f['severity'] == 'blocker' && f['title'].to_s.include?('EOL') }
+end
+
+def apply(report)
+  findings = report['findings'] || []
+  root = find_root_cause(findings)
+  return [0, nil] unless root
+  root_id = root['id']
+
+  demoted = 0
+  findings.each do |f|
+    next if f['id'] == root_id
+    next unless f['tool_origin'] == 'bundle-audit'
+    dims = [f['primary_dimension']] + (f['secondary_dimensions'] || [])
+    next unless dims.include?('foundation')
+    gem = gem_from_finding(f)
+    next unless gem && ROSTER[gem]
+    next if f['severity'] == 'low'
+    next if f['severity_inherited_from']
+
+    original = f['severity']
+    f['severity_inherited_from'] = root_id
+    f['severity'] = DEMOTE[original]
+    f['self_check'] ||= {}
+    note = "Demoted from #{original} via inheritance from #{root_id} (foundation upgrade fixes this)."
+    f['self_check']['notes'] = [f['self_check']['notes'], note].compact.reject(&:empty?).join(' ')
+    demoted += 1
+  end
+  [demoted, root_id]
+end
+
+def main(argv)
+  if argv.empty? || argv.include?('-h') || argv.include?('--help')
+    puts File.foreach(__FILE__).take(13).map { |l| l.sub(/^#\s?/, '') }.join
+    exit(argv.empty? ? 1 : 0)
+  end
+  in_path, out_path = argv[0], argv[1]
+  unless out_path
+    warn 'Output path required.'
+    exit 1
+  end
+  unless File.exist?(in_path)
+    warn "Input not found: #{in_path}"
+    exit 2
+  end
+
+  report = JSON.parse(File.read(in_path))
+  schema_version = report['schema_version']
+  unless schema_version && schema_version >= 2
+    warn "Input has schema_version #{schema_version.inspect}; need >= 2."
+    exit 2
+  end
+
+  total_before = report['findings'].size
+  blockers_before = report['findings'].count { |f| f['severity'] == 'blocker' }
+  highs_before    = report['findings'].count { |f| f['severity'] == 'high' }
+
+  demoted, root_id = apply(report)
+
+  blockers_after  = report['findings'].count { |f| f['severity'] == 'blocker' }
+  highs_after     = report['findings'].count { |f| f['severity'] == 'high' }
+
+  File.write(out_path, JSON.pretty_generate(report))
+
+  puts "wrote #{out_path}"
+  puts "  findings: #{total_before}"
+  puts "  demoted:  #{demoted} (root: #{root_id || '<none — no EOL root found>'})"
+  puts "  blocker_pct: #{(blockers_before.to_f / total_before * 100).round(1)}% → #{(blockers_after.to_f / total_before * 100).round(1)}%"
+  puts "  high_pct:    #{(highs_before.to_f    / total_before * 100).round(1)}% → #{(highs_after.to_f    / total_before * 100).round(1)}%"
+end
+
+main(ARGV.dup) if __FILE__ == $PROGRAM_NAME

@@ -1,0 +1,26 @@
+[
+  {
+    "filename": "/fixture/db/schema.rb",
+    "line_number": "86",
+    "message": "always add db index (addresses_campaigns => [address_id])",
+    "url": "https://rails-bestpractices.com/posts/2010/07/24/always-add-db-index/"
+  },
+  {
+    "filename": "/fixture/db/schema.rb",
+    "line_number": "86",
+    "message": "always add db index (addresses_campaigns => [campaign_id])",
+    "url": "https://rails-bestpractices.com/posts/2010/07/24/always-add-db-index/"
+  },
+  {
+    "filename": "/fixture/app/controllers/users_controller.rb",
+    "line_number": "12",
+    "message": "law of demeter",
+    "url": "https://rails-bestpractices.com/posts/2010/07/24/law-of-demeter/"
+  },
+  {
+    "filename": "/fixture/app/controllers/users_controller.rb",
+    "line_number": "20",
+    "message": "move model logic into model (user use_count > 4)",
+    "url": "https://rails-bestpractices.com/posts/2010/07/24/move-model-logic-into-the-model/"
+  }
+]
