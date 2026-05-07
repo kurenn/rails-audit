@@ -55,6 +55,48 @@ This skill takes the opposite approach. It invokes the existing Rails tooling ec
 | `--standard` (default) | ~10–15 min | Full audit, 4 parallel subagents. |
 | `--deep` | ~30+ min | Standard + boots app, runs spec subset, mutation testing on critical paths. |
 
+**Recommended cadence.** `--quick` per PR (or pre-merge), `--standard` quarterly or before a major release, `--deep` once before each significant release. `--continue` is the cheap re-run mode (~10× lower cost) for "I fixed N findings; show me the updated trend."
+
+## Cost & time
+
+The skill calls Anthropic's API through your Claude Code session. Token usage and dollar cost depend on the model your Claude Code is configured with and your project's size. Rough order-of-magnitude estimates from the dogfood projects (30–50 KLOC Rails apps, Sonnet 4.x):
+
+| Mode | Input tokens | Output tokens | Approx. cost (Sonnet 4.5) |
+|---|---|---|---|
+| `--quick` | ~10–20K | ~3–5K | $0.05–$0.20 |
+| `--standard` | ~50–80K | ~10–15K | $0.20–$1.50 |
+| `--continue` | ~5K | ~2K | ~$0.05 |
+| `--deep` | varies (boots app, runs specs) | varies | $1.00+ |
+
+These are estimates — your actual cost depends on model choice (Opus is ~5× Sonnet), project size, and finding density. The skill writes `cost.estimated_input_tokens` / `cost.estimated_output_tokens` into the JSON report, and when your harness exposes per-call usage metadata it also populates `cost.actual_*`. Watch the first run on a small `--quick` to anchor your own cost expectations before going `--standard` on a 100 KLOC monolith.
+
+## Privacy
+
+**What stays on your machine:**
+- Your codebase (the skill never uploads source files).
+- Static-tool outputs (`brakeman`, `bundle-audit`, `rubocop`, etc.) — invoked locally via your project's gems.
+- The generated report (`tmp/rails-audit/report-*.json`/`*.md`) — written locally, not uploaded.
+
+**What leaves your machine:**
+- Findings, file paths, line numbers, and code snippets cited as evidence are sent to Anthropic's API as part of the synthesis prompts (the same way Claude Code already sends file content when you ask it to read files).
+- No traffic to third-party services beyond Anthropic.
+
+**Cached:**
+- Anthropic's prompt cache may retain prompts/responses per its data-handling terms. If you're auditing a private codebase covered by a vendor agreement, check that your Claude Code's API contract allows it.
+
+The skill itself has no telemetry, no analytics, no "phone home." It runs entirely through your existing Claude Code session.
+
+## Requirements
+
+| | Supported | Notes |
+|---|---|---|
+| **Rails** | 6.1, 7.x, 8.x | Tested on 7.0.4 (influapp), 7.x (coba), 8.1.3 (pouch). Earlier versions may work but aren't tested. |
+| **Ruby** | 3.0+ | Tested on 3.1.2 and 3.4.7. Some Tier-2 gems (`reek`) require 3.4+ for transitive deps. |
+| **Test framework** | RSpec, Minitest | RSpec is the primary target; Minitest support is partial (coverage scoring works; spec-stability dimension defaults to RSpec idioms). |
+| **Deploy target** | Cloud Run, Heroku, Kamal, Fly, ECS | Detection works for most; some deploy-and-ci checks are Cloud-Run-specific (clearly marked in dimension files). |
+| **Auth strategies** | Devise, custom JWT, Identity Platform | The authorization dimension is strategy-agnostic; recommendations are tailored once Step 1 detects which one you use. |
+| **Ruby gems** (audited project) | `brakeman`, `bundler-audit` recommended; `rubocop`, `reek`, `rails_best_practices`, `simplecov`, `bullet` enrich coverage | Run `bin/check-tools` to see what's installed in your project. Missing tools degrade output gracefully, not silently. |
+
 ## Installation
 
 ### Recommended — via the kurenn marketplace
@@ -111,22 +153,84 @@ git clone https://github.com/kurenn/rails-audit --branch v0.3.0 ~/workspace/rail
 claude --plugin-dir ~/workspace/rails-audit-0.3.0
 ```
 
-## Usage
+## Quickstart
 
-In Claude Code, with a Rails project as your working directory:
+A 5-minute first run, end-to-end:
+
+**1. Pre-flight your tooling.** From your Rails project root:
+
+```bash
+bin/check-tools
+```
+
+That prints a table of which audit tools are installed (`brakeman`, `bundler-audit`, `rubocop`, etc.) and which are missing. Missing Tier-1 tools degrade your first audit's coverage — install them before continuing:
+
+```ruby
+# Gemfile
+group :development do
+  gem 'brakeman', require: false
+  gem 'bundler-audit', require: false
+  gem 'rubocop', require: false
+end
+```
+
+Run `bundle install` and re-run `bin/check-tools` until the Tier-1 row is full.
+
+**2. Run your first audit (use `--quick` to start small).** In Claude Code, with the Rails project as your working directory:
+
+```
+/rails-audit --quick
+```
+
+This finishes in ~3 minutes and costs around $0.05–$0.20 in Sonnet tokens. The skill writes:
+
+- `tmp/rails-audit/report-YYYY-MM-DD.json` — structured source of truth
+- `tmp/rails-audit/report-YYYY-MM-DD.md` — rendered report
+
+…and replies with a ≤200-word summary linking to both files.
+
+**3. Read the report.** Open the markdown file. The structure is: executive summary → top blockers → per-dimension scorecards → punch list grouped by Blocker / High / Medium / Low → recommended fix sequence in phases.
+
+**4. Decide what to fix first.** The fix sequence groups findings into phases such that each phase unblocks the next. Phase 1 is usually 1–2 days of work and removes the highest-priority blockers.
+
+**5. (Optional) File issues.** Once you've reviewed the report and want to track the work in GitHub:
+
+```bash
+bin/file-issues tmp/rails-audit/report-YYYY-MM-DD.json --mode=per-phase --no-dry-run --update-report
+```
+
+Files one issue per phase with the findings as a checklist. Re-running is idempotent (fingerprint-based).
+
+**6. Re-run after fixing.** When you've shipped a few fixes:
+
+```
+/rails-audit --continue
+```
+
+Skips the static tools + agent fan-out, re-runs only Steps 4.4–7 against the prior report. ~10× cheaper, gives you trend data.
+
+### Going deeper
+
+For the full audit (15 min, ~$0.20–$1.50):
 
 ```
 /rails-audit
 ```
 
-or
+For pre-release deep analysis (30+ min, app boots and specs run):
 
 ```
-/rails-audit --quick
 /rails-audit --deep
 ```
 
-The skill writes the report to `tmp/rails-audit/report-YYYY-MM-DD.md` and replies with a ≤200-word summary linking to the file.
+To narrow scope:
+
+```
+/rails-audit --only=money,security      # only the money + security dimensions
+/rails-audit --only-cluster=A,D         # spec-and-coverage + security-and-money clusters
+```
+
+See **Project profile** below for opt-in `.audit-config.yml` settings (custom roster, ignore rules, Tier-3 tools).
 
 ## Standalone tool inventory
 
@@ -246,6 +350,18 @@ Several v0.4-v0.5 features are documented contracts but were not exercised end-t
 If you're using this skill on a project: treat the v0.5 calibration thresholds as a starting point. Run the audit, look at the self-check output, and if C1/C7 fires in a way that feels wrong (e.g., your project genuinely has 8 dimensions ≤4 but the override doesn't apply), open an issue with your `report.json` attached. That's how the thresholds get to 1.0-worthy state.
 
 The `docs/lessons-learned.md` doc captures more of the build's hard-won insights, including the bugs that were caught and the design questions that didn't have a single right answer.
+
+## Troubleshooting
+
+When something goes wrong on a real run, see [`docs/troubleshooting.md`](docs/troubleshooting.md). The most common issues:
+
+- **`bundle exec brakeman` exits non-zero** → brakeman not in your Gemfile, or version mismatch with your Rails version.
+- **`gh: command not found` when running `bin/file-issues`** → install `gh` (`brew install gh` on macOS) and authenticate (`gh auth login`).
+- **Skill prompt hits a context limit on `--standard`** → the synthesizer ran out of context. Use `--quick` or scope with `--only=<cluster>` instead.
+- **`reek` fails with `Ruby 3.4+ required`** → `reek` is Tier-2 (recommended, not required). The audit completes without it; the gap surfaces as a tooling note in the report.
+- **`coverage/.resultset.json` is older than 30 days** → C6 self-check fires. Either run your spec suite to refresh it, or accept that test-coverage findings will be marked unverified.
+
+Found an issue not covered there? Open one at [github.com/kurenn/rails-audit/issues](https://github.com/kurenn/rails-audit/issues) with the `report.json` attached if relevant.
 
 ## Contributing
 
