@@ -1,0 +1,38 @@
+name: Tests
+
+# Runs bin/test-parsers on every PR and on pushes to main. The test
+# suite catches the class of silent bugs that would otherwise ship —
+# the `Regexp.last_match` clobber documented in
+# docs/lessons-learned.md §1 is the canonical example.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: bin/test-parsers
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.2', '3.3']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@bb6434c747fa7022e12fa1cae2a0951fcffcff26 # v1.253.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+
+      - name: Install runtime gems
+        run: gem install json_schemer --no-document
+
+      - name: Run bin/test-parsers
+        run: bin/test-parsers
