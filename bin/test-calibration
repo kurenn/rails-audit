@@ -1,0 +1,170 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/test-calibration — assert bin/run-self-check produces the expected
+# rule fires on each frozen fixture in test/calibration/. The fixtures
+# encode the load-bearing calibration discipline as enforced behavior:
+# any future PR that changes a threshold (C1, C2, C7) without updating
+# the assertions will fail this suite.
+#
+# Why this exists. lessons-learned.md §9 ("calibration on N=2 isn't
+# calibration") and §11 (N=3 result on pouch) document that the
+# thresholds were tuned with the influapp + coba evidence in hand. The
+# fixtures here freeze the design intent: every rule has a "should
+# fire" and "should suppress" path. Move a threshold and the test
+# tells you which path broke.
+#
+# Usage:
+#   bin/test-calibration            # run all fixtures
+#   bin/test-calibration --verbose
+#
+# Exits 0 if every fixture matches its expected outcome.
+
+require 'json'
+require 'open3'
+
+ROOT     = File.expand_path('..', __dir__)
+FIXTURES = File.join(ROOT, 'test', 'calibration')
+BIN      = File.join(ROOT, 'bin', 'run-self-check')
+VERBOSE  = ARGV.include?('--verbose')
+
+# Each entry is the contract a fixture must satisfy.
+# `fires` is the canonical effective-fires set (post-C7).
+# `c7_applies` is whether the override fires (only meaningful when C1 or C2 would fire).
+EXPECTATIONS = [
+  {
+    name:       'clean-baseline',
+    fires:      [],
+    c7_applies: false,
+    notes:      'all rules silent — sanity baseline'
+  },
+  {
+    name:       'c1-fires-c7-suppresses',
+    fires:      ['C5'], # broad-decay projects naturally have scorecard mismatches
+    c7_applies: true,
+    notes:      'high_pct 41.7% triggers C1; 12 dims ≤4 + 0 unverified + risk 4 → C7 suppresses C1. C5 fires because under-weighted scorecards on a broad-decay project is realistic.'
+  },
+  {
+    name:       'c1-fires-c7-fails-dims',
+    fires:      ['C1'],
+    c7_applies: false,
+    notes:      "pouch's case: high_pct 41.7% triggers C1, only 5 dims ≤4 (need ≥6) → C7 doesn't apply, C1 effective fires"
+  },
+  {
+    name:       'c2-fires',
+    fires:      ['C2'],
+    c7_applies: false,
+    notes:      'blocker_pct 40% triggers C2; only 5 dims ≤4 → C7 cannot apply'
+  },
+  {
+    name:       'c3-unverified-blocker',
+    fires:      ['C1', 'C3', 'C5'],
+    c7_applies: false,
+    notes:      'unverified blocker → C3 fires AND C7 cannot apply (no override on hallucination)'
+  },
+  {
+    name:       'c4-phase-mismatch',
+    fires:      ['C4'],
+    c7_applies: false,
+    notes:      'fix_sequence references findings with mismatched phase'
+  },
+  {
+    name:       'c5-scorecard-mismatch',
+    fires:      ['C5'],
+    c7_applies: false,
+    notes:      'security-and-authz scored 9 with weighted=13 (expected band 0–2)'
+  }
+].freeze
+
+PASS = "\e[32mPASS\e[0m"
+FAIL = "\e[31mFAIL\e[0m"
+
+def run_check(fixture, *extra)
+  out, err, status = Open3.capture3(BIN, fixture, *extra)
+  unless status.success?
+    puts "  [#{FAIL}] #{File.basename(fixture)} — bin/run-self-check exited #{status.exitstatus}: #{err.strip[0,160]}"
+    return nil
+  end
+  JSON.parse(out)
+rescue JSON::ParserError => e
+  puts "  [#{FAIL}] #{File.basename(fixture)} — bad JSON: #{e.message[0,80]}"
+  nil
+end
+
+failures = 0
+checks   = 0
+
+# --- per-fixture assertions -----------------------------------------
+puts 'Calibration regression suite'
+puts ''
+
+EXPECTATIONS.each do |spec|
+  fixture = File.join(FIXTURES, "#{spec[:name]}.json")
+  result  = run_check(fixture)
+  next failures += 1 unless result
+
+  fires_match  = result['fires'] == spec[:fires]
+  c7_match     = result['c7_applies'] == spec[:c7_applies]
+
+  checks += 1
+  if fires_match
+    puts "  [#{PASS}] #{spec[:name]}: fires=#{result['fires'].inspect}"
+  else
+    puts "  [#{FAIL}] #{spec[:name]}: fires=#{result['fires'].inspect}, expected=#{spec[:fires].inspect}"
+    puts "         note: #{spec[:notes]}"
+    failures += 1
+  end
+
+  checks += 1
+  if c7_match
+    puts "  [#{PASS}] #{spec[:name]}: c7_applies=#{result['c7_applies']}"
+  else
+    puts "  [#{FAIL}] #{spec[:name]}: c7_applies=#{result['c7_applies']}, expected=#{spec[:c7_applies]}"
+    failures += 1
+  end
+
+  if VERBOSE
+    puts "         metrics: #{result['metrics'].inspect}"
+  end
+end
+
+# --- C6 stale coverage exercise -------------------------------------
+# Use the clean baseline + a coverage-mtime that's clearly stale.
+puts ''
+puts 'C6 stale coverage (synthetic):'
+result = run_check(File.join(FIXTURES, 'clean-baseline.json'),
+                   '--coverage-mtime=2024-01-01', '--today=2026-05-07')
+if result
+  checks += 1
+  c6_fires = result['details']['c6']['fires']
+  if c6_fires
+    puts "  [#{PASS}] C6 fires when mtime is 858 days old"
+  else
+    puts "  [#{FAIL}] C6 did not fire on a clearly-stale mtime: #{result['details']['c6'].inspect}"
+    failures += 1
+  end
+else
+  failures += 1
+end
+
+# Fresh coverage: should not fire.
+result = run_check(File.join(FIXTURES, 'clean-baseline.json'),
+                   '--coverage-mtime=2026-05-01', '--today=2026-05-07')
+if result
+  checks += 1
+  c6_fires = result['details']['c6']['fires']
+  unless c6_fires
+    puts "  [#{PASS}] C6 silent when mtime is 6 days old"
+  else
+    puts "  [#{FAIL}] C6 fired on a fresh mtime: #{result['details']['c6'].inspect}"
+    failures += 1
+  end
+else
+  failures += 1
+end
+
+# --- summary --------------------------------------------------------
+puts ''
+puts '---'
+puts "#{checks - failures}/#{checks} calibration checks passed"
+exit(failures.zero? ? 0 : 1)

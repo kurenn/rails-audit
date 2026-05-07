@@ -1,0 +1,348 @@
+{
+  "schema_version": 2,
+  "skill_version": "0.5.1",
+  "audit": {
+    "id": "00000000-0000-4000-8000-ae01f17043d9",
+    "started_at": "2026-05-07T00:00:00Z",
+    "finished_at": "2026-05-07T00:01:00Z",
+    "mode": "standard",
+    "scope": [
+      "all"
+    ],
+    "commit": "deadbeefcafe",
+    "branch": "main",
+    "project_name": "fixture",
+    "stack": {
+      "ruby": "3.4.7",
+      "rails": "8.1.3"
+    },
+    "ignore_warnings": []
+  },
+  "summary": {
+    "risk_score": 4,
+    "verdict": "Fixture: c3-unverified-blocker",
+    "top_blocker_ids": [
+      "f-944812bdf393a700"
+    ],
+    "next_action": "n/a"
+  },
+  "scorecards": [
+    {
+      "dimension": "foundation",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "domain-shape",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "spec-stability",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "deploy-and-ci",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "security-and-authz",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "authorization",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "money-and-payments",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "risk-hotspots",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "code-smells",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "test-coverage",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "performance",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "reliability",
+      "score": 3,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "observability",
+      "score": 7,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "background-jobs",
+      "score": 7,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "data-integrity",
+      "score": 7,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "data-governance",
+      "score": 7,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "developer-experience",
+      "score": 7,
+      "would_be_10": "stub"
+    },
+    {
+      "dimension": "cost-and-scaling",
+      "score": 7,
+      "would_be_10": "stub"
+    }
+  ],
+  "findings": [
+    {
+      "id": "f-944812bdf393a700",
+      "severity": "blocker",
+      "primary_dimension": "foundation",
+      "title": "stub: c3-b1",
+      "location": {
+        "file": "app/c3-b1.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-b1",
+        "normalized": "c3-b1"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1,
+      "self_check": {
+        "status": "unverified",
+        "notes": "sed-confirm failed"
+      }
+    },
+    {
+      "id": "f-415d2774645d96bb",
+      "severity": "high",
+      "primary_dimension": "domain-shape",
+      "title": "stub: c3-h1",
+      "location": {
+        "file": "app/c3-h1.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-h1",
+        "normalized": "c3-h1"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-dda169d4ffcd1ea2",
+      "severity": "high",
+      "primary_dimension": "spec-stability",
+      "title": "stub: c3-h2",
+      "location": {
+        "file": "app/c3-h2.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-h2",
+        "normalized": "c3-h2"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-1d24864acd16a447",
+      "severity": "high",
+      "primary_dimension": "deploy-and-ci",
+      "title": "stub: c3-h3",
+      "location": {
+        "file": "app/c3-h3.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-h3",
+        "normalized": "c3-h3"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-66327ce4067d6191",
+      "severity": "high",
+      "primary_dimension": "security-and-authz",
+      "title": "stub: c3-h4",
+      "location": {
+        "file": "app/c3-h4.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-h4",
+        "normalized": "c3-h4"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-4bd93928aebe9e72",
+      "severity": "high",
+      "primary_dimension": "authorization",
+      "title": "stub: c3-h5",
+      "location": {
+        "file": "app/c3-h5.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-h5",
+        "normalized": "c3-h5"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-e16221ef63655e1e",
+      "severity": "medium",
+      "primary_dimension": "money-and-payments",
+      "title": "stub: c3-m1",
+      "location": {
+        "file": "app/c3-m1.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-m1",
+        "normalized": "c3-m1"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-64669a3ad9075121",
+      "severity": "medium",
+      "primary_dimension": "risk-hotspots",
+      "title": "stub: c3-m2",
+      "location": {
+        "file": "app/c3-m2.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-m2",
+        "normalized": "c3-m2"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-f5b72d3ddb66fb30",
+      "severity": "medium",
+      "primary_dimension": "code-smells",
+      "title": "stub: c3-m3",
+      "location": {
+        "file": "app/c3-m3.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-m3",
+        "normalized": "c3-m3"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-2d4640f64b244531",
+      "severity": "medium",
+      "primary_dimension": "test-coverage",
+      "title": "stub: c3-m4",
+      "location": {
+        "file": "app/c3-m4.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-m4",
+        "normalized": "c3-m4"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-e3568bcc1705cf45",
+      "severity": "medium",
+      "primary_dimension": "performance",
+      "title": "stub: c3-m5",
+      "location": {
+        "file": "app/c3-m5.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-m5",
+        "normalized": "c3-m5"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    },
+    {
+      "id": "f-daf4172508002504",
+      "severity": "medium",
+      "primary_dimension": "reliability",
+      "title": "stub: c3-m6",
+      "location": {
+        "file": "app/c3-m6.rb",
+        "line": 1
+      },
+      "evidence": {
+        "snippet": "c3-m6",
+        "normalized": "c3-m6"
+      },
+      "explanation": "stub",
+      "fix_sketch": "stub",
+      "tool_origin": "agent",
+      "phase": 1
+    }
+  ],
+  "tooling": {
+    "ran": [],
+    "missing": [],
+    "skipped": []
+  }
+}

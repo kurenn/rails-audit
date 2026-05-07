@@ -1,0 +1,203 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/run-self-check — canonical implementation of the C1–C7 self-check rules.
+#
+# Usage:
+#   bin/run-self-check <report.json>      # evaluate file at path
+#   bin/run-self-check -                    # read JSON from stdin
+#   bin/run-self-check --help
+#
+# Emits a structured JSON result to stdout describing which checks fire,
+# the metrics that drove each decision, and the C7 override outcome.
+# Exits 0 always — fires are data, not failure.
+#
+# This is the source-of-truth implementation that calibration regression
+# tests assert against. The rules themselves are documented at
+# `skills/rails-audit/dimensions/self-check.md`. When they diverge, that
+# doc and this script are the things that need to stay in sync — the
+# Skill prompt's "Step 5.5 self-check" wording is descriptive.
+#
+# What this script does NOT do:
+#   - C3 sed-confirm — that requires the audited repo on disk. This script
+#     reads the report's `findings[].self_check.status` field (set during
+#     the live audit) as the C3 signal. For unit tests we set the field
+#     directly in fixtures.
+#   - C6 coverage staleness — this script reads a `--coverage-mtime=YYYY-MM-DD`
+#     argument when supplied; otherwise C6 is reported as `skipped`.
+
+require 'json'
+require 'optparse'
+require 'date'
+
+# -------------------------------------------------------------------
+# CLI
+
+options = { coverage_mtime: nil, today: Date.today, help: false }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: bin/run-self-check <report.json|->"
+  opts.on('--coverage-mtime=YYYY-MM-DD', 'Mock coverage file mtime for C6 (else: skipped)') do |s|
+    options[:coverage_mtime] = Date.parse(s)
+  end
+  opts.on('--today=YYYY-MM-DD', 'Override today (for deterministic tests)') do |s|
+    options[:today] = Date.parse(s)
+  end
+  opts.on('-h', '--help', 'Show help') { options[:help] = true }
+end
+parser.parse!
+
+if options[:help] || ARGV.empty?
+  puts parser
+  exit(options[:help] ? 0 : 1)
+end
+
+# Load report
+text = ARGV.first == '-' ? $stdin.read : File.read(ARGV.first)
+report = JSON.parse(text)
+
+findings    = report['findings'] || []
+scorecards  = report['scorecards'] || []
+risk_score  = report.dig('summary', 'risk_score')
+fix_seq     = report['fix_sequence'] || []
+
+total = findings.size
+
+# -------------------------------------------------------------------
+# C1 — Severity inflation: high_pct > 0.40
+high_count = findings.count { |f| f['severity'] == 'high' }
+high_pct = total.zero? ? 0.0 : high_count.fdiv(total)
+c1_would_fire = high_pct > 0.40
+
+# C2 — Blocker over-use: blocker_pct > 0.30 (raised from 0.25 in v0.5)
+blocker_count = findings.count { |f| f['severity'] == 'blocker' }
+blocker_pct = total.zero? ? 0.0 : blocker_count.fdiv(total)
+c2_would_fire = blocker_pct > 0.30
+
+# C3 — Unverified blocker: any blocker with self_check.status == 'unverified'
+# In a live run this comes from the sed-confirm step. For tests, fixtures
+# set the field directly.
+unverified_blockers = findings.select { |f|
+  f['severity'] == 'blocker' && f.dig('self_check', 'status') == 'unverified'
+}.map { |f| f['id'] }
+c3_fires = !unverified_blockers.empty?
+
+# C4 — Phase dependency mismatch
+finding_phase_by_id = findings.each_with_object({}) { |f, h| h[f['id']] = f['phase'] }
+c4_mismatches = []
+fix_seq.each do |phase_entry|
+  phase_n = phase_entry['phase']
+  (phase_entry['finding_ids'] || []).each do |fid|
+    fp = finding_phase_by_id[fid]
+    next if fp.nil? # missing finding is a different problem (caught by validate-report)
+    c4_mismatches << { id: fid, finding_phase: fp, fix_seq_phase: phase_n } if fp != phase_n
+  end
+end
+c4_fires = !c4_mismatches.empty?
+
+# C5 — Scorecard ↔ finding-count mismatch
+SEVERITY_WEIGHT = { 'blocker' => 4, 'high' => 3, 'medium' => 2, 'low' => 1 }.freeze
+def expected_band(weighted)
+  case weighted
+  when 0       then [9, 10]
+  when 1..2    then [7, 8]
+  when 3..5    then [5, 6]
+  when 6..10   then [3, 4]
+  else              [0, 2]
+  end
+end
+
+c5_mismatches = []
+scorecards.each do |sc|
+  dim = sc['dimension']
+  weighted = findings.sum do |f|
+    next 0 unless [f['primary_dimension']].concat(f['secondary_dimensions'] || []).include?(dim)
+    SEVERITY_WEIGHT[f['severity']] || 0
+  end
+  expected_lo, expected_hi = expected_band(weighted)
+  actual = sc['score']
+  next if actual.nil?
+  # mismatch threshold: > 2 points outside the band
+  delta = if    actual < expected_lo then expected_lo - actual
+          elsif actual > expected_hi then actual - expected_hi
+          else 0
+          end
+  if delta > 2
+    c5_mismatches << {
+      dimension: dim, actual: actual, expected_band: [expected_lo, expected_hi],
+      weighted_count: weighted
+    }
+  end
+end
+c5_fires = !c5_mismatches.empty?
+
+# C6 — Stale coverage data (>30 days)
+c6_status =
+  if options[:coverage_mtime].nil?
+    { fires: false, reason: 'skipped (no --coverage-mtime supplied)' }
+  else
+    age = (options[:today] - options[:coverage_mtime]).to_i
+    if age > 30
+      { fires: true, age_days: age, mtime: options[:coverage_mtime].iso8601 }
+    else
+      { fires: false, age_days: age, mtime: options[:coverage_mtime].iso8601 }
+    end
+  end
+c6_fires = c6_status[:fires]
+
+# C7 — Real-distribution override (only relevant if C1 or C2 would fire)
+dims_le_4 = scorecards.count { |sc| sc['score'] && sc['score'] <= 4 }
+c7_conditions = {
+  no_unverified_blockers: unverified_blockers.empty?,
+  risk_score_le_4:        risk_score && risk_score <= 4,
+  dims_le_4_ge_6:         dims_le_4 >= 6
+}
+c7_applies = (c1_would_fire || c2_would_fire) && c7_conditions.values.all?
+
+# Effective C1/C2 (after C7)
+c1_effective = c1_would_fire && !c7_applies
+c2_effective = c2_would_fire && !c7_applies
+
+# -------------------------------------------------------------------
+# Compose result
+
+fires = []
+fires << 'C1' if c1_effective
+fires << 'C2' if c2_effective
+fires << 'C3' if c3_fires
+fires << 'C4' if c4_fires
+fires << 'C5' if c5_fires
+fires << 'C6' if c6_fires
+# C7 isn't a "fire" — it's an override that suppresses C1/C2.
+
+would_fire = []
+would_fire << 'C1' if c1_would_fire
+would_fire << 'C2' if c2_would_fire
+would_fire << 'C3' if c3_fires
+would_fire << 'C4' if c4_fires
+would_fire << 'C5' if c5_fires
+would_fire << 'C6' if c6_fires
+
+result = {
+  fires: fires,
+  would_fire_pre_c7: would_fire,
+  c7_applies: c7_applies,
+  metrics: {
+    total_findings: total,
+    high_pct: high_pct.round(4),
+    blocker_pct: blocker_pct.round(4),
+    risk_score: risk_score,
+    dims_le_4: dims_le_4,
+    unverified_blockers: unverified_blockers
+  },
+  details: {
+    c1: { would_fire: c1_would_fire, effective: c1_effective, threshold: 0.40 },
+    c2: { would_fire: c2_would_fire, effective: c2_effective, threshold: 0.30 },
+    c3: { fires: c3_fires, unverified_blockers: unverified_blockers },
+    c4: { fires: c4_fires, mismatches: c4_mismatches },
+    c5: { fires: c5_fires, mismatches: c5_mismatches },
+    c6: c6_status,
+    c7: { applies: c7_applies, conditions: c7_conditions }
+  }
+}
+
+puts JSON.pretty_generate(result)
