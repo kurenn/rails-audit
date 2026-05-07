@@ -1,6 +1,6 @@
 {
   "name": "rails-audit",
-  "version": "0.3.0",
+  "version": "0.5.1",
   "description": "Comprehensive Rails project stability audit across 18 dimensions — foundation, domain, specs, deploy/CI, security, money paths, code health, performance, reliability, observability, jobs, data integrity, governance, DX, cost. Read-only — produces a severity-ranked markdown report.",
   "author": {
     "name": "Abraham Kuri",

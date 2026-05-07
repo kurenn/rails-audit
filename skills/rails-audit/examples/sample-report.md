@@ -6,6 +6,8 @@
 **Stack detected:** Rails 7.0.4 / Ruby 3.1.2 / cloud_run / cloudtasker / custom_jwt_identity_platform / rspec
 
 > This is the markdown render of [`sample-report.json`](sample-report.json). The skill renders this file from the JSON via the rules in [`output-template.md`](../output-template.md). Any change you'd want here should land in the JSON or the template — not by editing this file directly.
+>
+> **Schema currency:** the sample exercises the v0.2 schema shape and validates clean against the current (v0.5.1) schema — schema additivity is preserved across minor versions. Features added in later minor versions (`severity_inherited_from`, `self_check.calibration.warnings`, `audit.calibration_overrides`) are documented in `CHANGELOG.md`; see the README's Calibration status section for the v0.4-v0.5 dogfood evidence.
 
 ---
 
