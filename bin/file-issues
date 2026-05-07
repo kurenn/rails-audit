@@ -1,0 +1,366 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/file-issues — turn a v0.5+ rails-audit report into GitHub issues.
+#
+# Usage:
+#   bin/file-issues <report.json> [--mode=MODE] [--severity=LIST]
+#                                 [--repo=OWNER/REPO] [--milestone=TITLE]
+#                                 [--label-prefix=PREFIX]
+#                                 [--update-report] [--no-dry-run]
+#   bin/file-issues --help
+#
+# Default mode is dry-run: prints what it would do without calling the
+# GitHub API. Pass --no-dry-run to actually file.
+#
+# Modes:
+#   per-phase    (default) — one issue per fix_sequence phase. Findings
+#                in that phase are listed as a checklist in the body.
+#   per-finding  — one issue per finding (filtered by --severity).
+#
+# Idempotency: each issue body carries a fingerprint footer such as
+#   <!-- rails-audit:fingerprint=f-1100000000000001 -->
+# or for phase issues:
+#   <!-- rails-audit:phase=1 fingerprints=f-...,f-... -->
+# Before creating, the script searches the repo for issues containing
+# the fingerprint marker and skips/updates as appropriate.
+#
+# Authentication: uses the `gh` CLI. Must be installed and authenticated
+# (`gh auth status` should succeed).
+#
+# This script does NOT close issues — that's the operator's job. Closed
+# issues are treated as "decided not to fix"; new audit runs do not
+# reopen them automatically.
+
+require 'json'
+require 'optparse'
+require 'open3'
+
+VALID_MODES      = %w[per-phase per-finding].freeze
+VALID_SEVERITIES = %w[blocker high medium low].freeze
+
+# ---------------------------------------------------------------------
+# CLI parsing
+# ---------------------------------------------------------------------
+
+options = {
+  mode:         'per-phase',
+  severity:     nil,         # filled in per mode after parsing
+  repo:         nil,
+  milestone:    nil,
+  label_prefix: 'audit',
+  update_report: false,
+  dry_run:      true,
+  help:         false
+}
+
+parser = OptionParser.new do |opts|
+  opts.banner = 'Usage: bin/file-issues <report.json> [options]'
+  opts.on('--mode=MODE', VALID_MODES, "One of: #{VALID_MODES.join(', ')}") { |m| options[:mode] = m }
+  opts.on('--severity=LIST', "Comma-separated subset of #{VALID_SEVERITIES.join(',')}") { |s| options[:severity] = s.split(',').map(&:strip) }
+  opts.on('--repo=OWNER/REPO', 'Target repo (default: inferred from cwd git remote)') { |r| options[:repo] = r }
+  opts.on('--milestone=TITLE', 'Apply this milestone title to all created issues') { |t| options[:milestone] = t }
+  opts.on('--label-prefix=PREFIX', "Label prefix (default: audit)") { |p| options[:label_prefix] = p }
+  opts.on('--update-report', 'Write issue_url back into the report JSON') { options[:update_report] = true }
+  opts.on('--no-dry-run', 'Actually file issues (default is dry-run)') { options[:dry_run] = false }
+  opts.on('-h', '--help', 'Show this help') { options[:help] = true }
+end
+parser.parse!
+
+if options[:help] || ARGV.empty?
+  puts parser
+  exit(options[:help] ? 0 : 1)
+end
+
+report_path = ARGV.first
+unless File.exist?(report_path)
+  abort "ERR: report not found: #{report_path}"
+end
+
+# Default severity per mode
+options[:severity] ||= options[:mode] == 'per-finding' ? %w[blocker high] : VALID_SEVERITIES
+options[:severity].each do |s|
+  abort "ERR: invalid severity '#{s}' (allowed: #{VALID_SEVERITIES.join(',')})" unless VALID_SEVERITIES.include?(s)
+end
+
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
+
+def sh(*cmd)
+  out, err, status = Open3.capture3(*cmd)
+  [out.strip, err.strip, status.success?]
+end
+
+def infer_repo
+  out, _err, ok = sh('git', 'config', '--get', 'remote.origin.url')
+  return nil unless ok
+  case out
+  when %r{github\.com[:/]([^/]+)/([^/.]+?)(?:\.git)?\z} then "#{$1}/#{$2}"
+  end
+end
+
+def gh_available?
+  _out, _err, ok = sh('gh', '--version')
+  ok
+end
+
+def gh_authenticated?
+  _out, _err, ok = sh('gh', 'auth', 'status')
+  ok
+end
+
+def find_issue_by_marker(repo, marker)
+  # We use --search with the literal marker; gh searches issue body+title.
+  # Returns first match URL or nil.
+  out, _err, ok = sh('gh', 'issue', 'list',
+                     '--repo', repo,
+                     '--state', 'all',
+                     '--search', marker,
+                     '--json', 'url,number,state,body',
+                     '--limit', '50')
+  return nil unless ok
+  list = JSON.parse(out) rescue []
+  hit = list.find { |i| (i['body'] || '').include?(marker) }
+  hit && hit['url']
+end
+
+def create_issue(repo, title, body, labels, milestone)
+  cmd = ['gh', 'issue', 'create', '--repo', repo, '--title', title, '--body', body]
+  labels.each { |l| cmd += ['--label', l] }
+  cmd += ['--milestone', milestone] if milestone
+  out, err, ok = sh(*cmd)
+  abort "ERR: gh issue create failed:\n  cmd=#{cmd.inspect}\n  stderr=#{err}" unless ok
+  out.lines.last.to_s.strip  # gh prints the URL on stdout
+end
+
+def ensure_label(repo, name, color, description)
+  # Best-effort label creation. If it exists, this errors and we ignore.
+  sh('gh', 'label', 'create', name,
+     '--repo', repo,
+     '--color', color,
+     '--description', description)
+end
+
+# ---------------------------------------------------------------------
+# Issue body builders
+# ---------------------------------------------------------------------
+
+SEVERITY_LABEL_COLORS = {
+  'blocker' => 'b60205',
+  'high'    => 'd93f0b',
+  'medium'  => 'fbca04',
+  'low'     => '0e8a16'
+}.freeze
+
+def severity_emoji(sev)
+  { 'blocker' => '!', 'high' => '*', 'medium' => '-', 'low' => '.' }.fetch(sev, '?')
+end
+
+def phase_marker(phase_id, fingerprints)
+  "<!-- rails-audit:phase=#{phase_id} fingerprints=#{fingerprints.join(',')} -->"
+end
+
+def finding_marker(fp)
+  "<!-- rails-audit:fingerprint=#{fp} -->"
+end
+
+def phase_issue(phase, findings_by_id, audit, skill_version)
+  member_ids = phase['finding_ids'] || []
+  members = member_ids.map { |id| findings_by_id[id] }.compact
+  members.sort_by! { |f| %w[blocker high medium low].index(f['severity']) || 99 }
+
+  title = "[rails-audit] Phase #{phase['phase']}: #{phase['name']}"
+  lines = []
+  lines << "_Audit-driven work item generated by [rails-audit](https://github.com/kurenn/rails-audit)._"
+  lines << ''
+  lines << "**Effort:** #{phase['estimated_effort']}  "
+  lines << "**Rationale:** #{phase['rationale']}"
+  lines << ''
+  lines << "## Findings in this phase (#{members.size})"
+  lines << ''
+  members.each do |f|
+    loc = f.dig('location', 'file').to_s
+    line = f.dig('location', 'line')
+    loc = "#{loc}:#{line}" if line
+    lines << "- [ ] **[#{f['severity']}]** #{f['title']} — `#{loc}` (`#{f['id']}`)"
+  end
+  lines << ''
+  lines << '---'
+  lines << "Audit run: `#{audit['id']}` · commit `#{audit['commit']}` · branch `#{audit['branch']}`  "
+  lines << "Skill version: #{skill_version || 'rails-audit'}"
+  lines << ''
+  lines << phase_marker(phase['phase'], member_ids)
+  body = lines.join("\n")
+
+  labels = ['audit', "audit:phase-#{phase['phase']}"]
+  { title: title, body: body, labels: labels, fingerprints: member_ids, phase: phase['phase'] }
+end
+
+def finding_issue(f, audit, label_prefix)
+  loc = f.dig('location', 'file').to_s
+  line = f.dig('location', 'line')
+  loc = "#{loc}:#{line}" if line
+
+  title = "[rails-audit:#{f['severity']}] #{f['title']}"
+  title = title[0, 250]
+
+  lines = []
+  lines << "_Audit finding generated by [rails-audit](https://github.com/kurenn/rails-audit)._"
+  lines << ''
+  lines << "**Severity:** #{f['severity']} (#{severity_emoji(f['severity'])})  "
+  lines << "**Primary dimension:** `#{f['primary_dimension']}`  "
+  lines << "**Tool:** `#{f['tool_origin']}`  "
+  lines << "**Effort estimate:** `#{f['time_estimate']}`" if f['time_estimate']
+  lines << ''
+  lines << "## Location"
+  lines << ''
+  lines << "`#{loc}`" unless loc.empty?
+  lines << ''
+  if (snippet = f.dig('evidence', 'snippet')).is_a?(String) && !snippet.empty?
+    lines << "## Evidence"
+    lines << ''
+    lines << '```'
+    lines << snippet
+    lines << '```'
+    lines << ''
+  end
+  if (expl = f['explanation']).is_a?(String) && !expl.empty?
+    lines << "## Why this is flagged"
+    lines << ''
+    lines << expl
+    lines << ''
+  end
+  if (fix = f['fix_sketch']).is_a?(String) && !fix.empty?
+    lines << "## Fix sketch"
+    lines << ''
+    lines << fix
+    lines << ''
+  end
+  if f['severity_inherited_from']
+    lines << "_Severity inherited from root finding `#{f['severity_inherited_from']}` (one-tier demotion). Closing the root finding's issue closes the underlying problem for this one too._"
+    lines << ''
+  end
+  lines << '---'
+  lines << "Audit run: `#{audit['id']}` · commit `#{audit['commit']}`"
+  lines << ''
+  lines << finding_marker(f['id'])
+  body = lines.join("\n")
+
+  labels = [
+    label_prefix,
+    "#{label_prefix}:#{f['severity']}",
+    "dim:#{f['primary_dimension']}"
+  ]
+  { title: title, body: body, labels: labels, fingerprints: [f['id']], phase: f['phase'] }
+end
+
+# ---------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------
+
+report = JSON.parse(File.read(report_path))
+audit         = report['audit'] || {}
+skill_version = report['skill_version']
+
+findings = report['findings'] || []
+findings_by_id = findings.each_with_object({}) { |f, h| h[f['id']] = f }
+fix_sequence = report['fix_sequence'] || []
+
+# Filter findings by severity (only matters for what gets surfaced/listed).
+filter = options[:severity]
+filtered_findings = findings.select { |f| filter.include?(f['severity']) }
+
+# Determine the issue plan
+plan =
+  case options[:mode]
+  when 'per-phase'
+    fix_sequence.map { |phase| phase_issue(phase, findings_by_id, audit, skill_version) }
+  when 'per-finding'
+    filtered_findings.map { |f| finding_issue(f, audit, options[:label_prefix]) }
+  end
+
+# Repo target
+repo = options[:repo] || infer_repo
+if repo.nil?
+  abort "ERR: --repo not specified and could not infer from git remote (run inside a git repo with a github.com origin)"
+end
+
+# Show the plan
+warn "rails-audit/file-issues — #{options[:dry_run] ? 'DRY-RUN' : 'LIVE'}"
+warn "  report:    #{report_path}"
+warn "  repo:      #{repo}"
+warn "  mode:      #{options[:mode]}"
+warn "  severity:  #{filter.join(',')}"
+warn "  milestone: #{options[:milestone] || '(none)'}"
+warn "  issues:    #{plan.size}"
+warn ''
+
+if options[:dry_run]
+  plan.each_with_index do |item, idx|
+    puts "═" * 72
+    puts "[#{idx + 1}/#{plan.size}] TITLE: #{item[:title]}"
+    puts "       LABELS: #{item[:labels].join(', ')}"
+    puts "       FINGERPRINTS: #{item[:fingerprints].join(', ')}"
+    puts "─" * 72
+    puts item[:body]
+  end
+  puts "═" * 72
+  warn "\nDry-run complete. To actually file these issues, re-run with --no-dry-run."
+  exit 0
+end
+
+# Live run preflight
+abort "ERR: gh CLI not found on PATH. Install: https://cli.github.com" unless gh_available?
+abort "ERR: gh not authenticated. Run: gh auth login" unless gh_authenticated?
+
+# Ensure label namespace exists (best-effort, ignores errors)
+ensure_label(repo, options[:label_prefix], '5319e7', 'rails-audit-generated issue')
+%w[blocker high medium low].each do |sev|
+  ensure_label(repo, "#{options[:label_prefix]}:#{sev}", SEVERITY_LABEL_COLORS[sev], "rails-audit severity: #{sev}")
+end
+(1..5).each do |p|
+  ensure_label(repo, "#{options[:label_prefix]}:phase-#{p}", '1d76db', "rails-audit fix-sequence phase #{p}")
+end
+
+results = []
+plan.each_with_index do |item, idx|
+  marker =
+    if item[:phase] && options[:mode] == 'per-phase'
+      "rails-audit:phase=#{item[:phase]}"
+    else
+      "rails-audit:fingerprint=#{item[:fingerprints].first}"
+    end
+
+  existing_url = find_issue_by_marker(repo, marker)
+  if existing_url
+    warn "[#{idx + 1}/#{plan.size}] SKIP (already filed): #{existing_url}"
+    results << { fingerprints: item[:fingerprints], url: existing_url, action: 'skipped' }
+    next
+  end
+
+  url = create_issue(repo, item[:title], item[:body], item[:labels], options[:milestone])
+  warn "[#{idx + 1}/#{plan.size}] CREATED: #{url}"
+  results << { fingerprints: item[:fingerprints], url: url, action: 'created' }
+end
+
+# Optionally update the report JSON with issue_urls
+if options[:update_report]
+  results.each do |r|
+    r[:fingerprints].each do |fp|
+      f = findings_by_id[fp]
+      f['issue_url'] = r[:url] if f
+    end
+  end
+  File.write(report_path, JSON.pretty_generate(report) + "\n")
+  warn "\nUpdated #{report_path} with issue_url fields."
+end
+
+# Final summary on stdout
+puts JSON.pretty_generate(
+  repo: repo,
+  mode: options[:mode],
+  filed: results.count { |r| r[:action] == 'created' },
+  skipped: results.count { |r| r[:action] == 'skipped' },
+  results: results
+)

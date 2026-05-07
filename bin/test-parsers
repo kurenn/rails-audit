@@ -301,6 +301,75 @@ _out, err, code = run_validator(CROSS_REF_BAD)
 checks += 1
 failures += 1 unless check('cross-ref to non-existent finding id surfaced',
                            code == 2 && err.include?('refers to unknown finding id'))
+
+puts ''
+
+# --- file-issues -----------------------------------------------------------
+# Smoke-tests the v0.6 issues filer in dry-run mode (no GitHub calls).
+# Verifies plan shape, fingerprint markers, severity filter, label mapping.
+puts 'file-issues (dry-run):'
+
+require 'tempfile'
+
+def run_dry(*args)
+  out, err, status = Open3.capture3(File.join(BIN, 'file-issues'), *args, '--repo', 'k/r')
+  [out, err, status.success?]
+end
+
+# per-phase mode: 2 phases in fixture → 2 issues
+out, _err, ok = run_dry(File.join(FIXTURES, 'sample-report.json'), '--mode=per-phase')
+checks += 1
+failures += 1 unless check('per-phase exits 0', ok)
+checks += 1
+failures += 1 unless check('per-phase emits 2 issue plans (one per phase)',
+                           out.scan(/^\[\d+\/\d+\] TITLE: \[rails-audit\] Phase \d+:/).size == 2,
+                           "got #{out.scan(/^\[\d+\/\d+\] TITLE:/).size}")
+checks += 1
+failures += 1 unless check('per-phase body contains phase marker with fingerprints',
+                           out.include?('<!-- rails-audit:phase=1 fingerprints=f-aaaaaaaaaaaa0001,f-aaaaaaaaaaaa0002 -->'))
+checks += 1
+failures += 1 unless check('per-phase body lists severity-prefixed checklist items',
+                           out.include?('- [ ] **[blocker]**') && out.include?('- [ ] **[high]**'))
+checks += 1
+failures += 1 unless check('per-phase ends with dry-run hint',
+                           out.include?('Dry-run complete') || _err.include?('Dry-run complete'))
+
+# per-finding mode with default severity (blocker,high) → 2 issues
+out, _err, ok = run_dry(File.join(FIXTURES, 'sample-report.json'), '--mode=per-finding')
+checks += 1
+failures += 1 unless check('per-finding default severity emits 2 (blocker+high, excludes medium)',
+                           out.scan(/^\[\d+\/\d+\] TITLE: \[rails-audit:/).size == 2,
+                           "got #{out.scan(/^\[\d+\/\d+\] TITLE:/).size}")
+checks += 1
+failures += 1 unless check('per-finding body has finding-marker',
+                           out.include?('<!-- rails-audit:fingerprint=f-aaaaaaaaaaaa0001 -->'))
+checks += 1
+failures += 1 unless check('per-finding body labels include severity + dimension',
+                           out.include?('LABELS: audit, audit:blocker, dim:security-and-authz'))
+
+# Regression: bin/file-issues must not mutate report['audit'] during builder.
+# Earlier bug stuffed skill_version into audit, which polluted the file when
+# --update-report wrote back. Round-trip JSON parse before/after dry-run and
+# diff.
+require 'json'
+before = JSON.parse(File.read(File.join(FIXTURES, 'sample-report.json')))
+run_dry(File.join(FIXTURES, 'sample-report.json'), '--mode=per-phase')
+after = JSON.parse(File.read(File.join(FIXTURES, 'sample-report.json')))
+checks += 1
+failures += 1 unless check('dry-run does not mutate fixture (no audit pollution)',
+                           before == after,
+                           'sample-report.json content changed during dry-run')
+
+# per-finding with --severity=medium → 1 issue
+out, _err, ok = run_dry(File.join(FIXTURES, 'sample-report.json'), '--mode=per-finding', '--severity=medium')
+checks += 1
+failures += 1 unless check('per-finding --severity=medium emits 1',
+                           out.scan(/^\[\d+\/\d+\] TITLE: \[rails-audit:/).size == 1,
+                           "got #{out.scan(/^\[\d+\/\d+\] TITLE:/).size}")
+checks += 1
+failures += 1 unless check('per-finding --severity=medium picks the medium finding',
+                           out.include?('No SimpleCov configured'))
+
 puts ''
 
 # ---------------------------------------------------------------------------
