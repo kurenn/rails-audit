@@ -1,0 +1,279 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# test/calibration/_generate — produces the calibration fixtures from a
+# compact spec. Re-run after adding/changing a fixture; commit the
+# resulting JSON. The generator avoids ~600 lines of duplicated JSON
+# scaffolding while keeping the actual fixtures human-reviewable.
+#
+# Usage:
+#   test/calibration/_generate
+#
+# Each fixture is named by what it tests and exercises one specific
+# path through bin/run-self-check.
+
+require 'json'
+require 'digest'
+
+OUT = File.expand_path('..', __FILE__)
+
+# ---- helpers -------------------------------------------------------
+
+def fp(seed)
+  'f-' + Digest::SHA256.hexdigest(seed)[0, 16]
+end
+
+ALL_DIMS = %w[
+  foundation domain-shape spec-stability deploy-and-ci security-and-authz
+  authorization money-and-payments risk-hotspots code-smells test-coverage
+  performance reliability observability background-jobs data-integrity
+  data-governance developer-experience cost-and-scaling
+].freeze
+
+def base(name, project: 'fixture')
+  {
+    'schema_version' => 2,
+    'skill_version'  => '0.5.1',
+    'audit' => {
+      'id'           => '00000000-0000-4000-8000-' + Digest::SHA256.hexdigest(name)[0, 12],
+      'started_at'   => '2026-05-07T00:00:00Z',
+      'finished_at'  => '2026-05-07T00:01:00Z',
+      'mode'         => 'standard',
+      'scope'        => ['all'],
+      'commit'       => 'deadbeefcafe',
+      'branch'       => 'main',
+      'project_name' => project,
+      'stack'        => { 'ruby' => '3.4.7', 'rails' => '8.1.3' },
+      'ignore_warnings' => []
+    },
+    'summary' => {
+      'risk_score'      => 5,
+      'verdict'         => "Fixture: #{name}",
+      'top_blocker_ids' => [],
+      'next_action'     => 'n/a'
+    },
+    'scorecards' => [],
+    'findings'   => [],
+    'tooling'    => { 'ran' => [], 'missing' => [], 'skipped' => [] }
+  }
+end
+
+# Build a finding stub. Severity, optional unverified flag, optional phase.
+# `dim_index` lets the caller round-robin findings across all 18 dimensions
+# so no dimension accidentally accumulates enough weight to trigger C5.
+def finding(seed, severity:, dim: nil, dim_index: nil, phase: 1, unverified: false, secondary: [])
+  primary = dim || (dim_index ? ALL_DIMS[dim_index % ALL_DIMS.size] : 'security-and-authz')
+  f = {
+    'id'                => fp(seed),
+    'severity'          => severity,
+    'primary_dimension' => primary,
+    'title'             => "stub: #{seed}",
+    'location'          => { 'file' => "app/#{seed}.rb", 'line' => 1 },
+    'evidence'          => { 'snippet' => seed, 'normalized' => seed },
+    'explanation'       => 'stub',
+    'fix_sketch'        => 'stub',
+    'tool_origin'       => 'agent',
+    'phase'             => phase
+  }
+  f['secondary_dimensions'] = secondary unless secondary.empty?
+  f['self_check'] = { 'status' => 'unverified', 'notes' => 'sed-confirm failed' } if unverified
+  f
+end
+
+# Build N scorecards. Provide a hash of dimension => score for overrides;
+# all other dims default to 7.
+def scorecards(overrides = {})
+  ALL_DIMS.map do |d|
+    { 'dimension' => d, 'score' => overrides[d] || 7, 'would_be_10' => 'stub' }
+  end
+end
+
+def write(name, doc)
+  path = File.join(OUT, "#{name}.json")
+  File.write(path, JSON.pretty_generate(doc) + "\n")
+  puts "  wrote #{name}.json"
+end
+
+# ---- fixtures ------------------------------------------------------
+
+# 1. clean-baseline — no rules fire.
+#    1 blocker / 3 high / 4 medium / 2 low = 10 findings.
+#    blocker_pct = 0.10, high_pct = 0.30. risk_score 7. all dims 7+.
+def gen_clean_baseline
+  doc = base('clean-baseline')
+  doc['summary']['risk_score'] = 7
+  doc['scorecards'] = scorecards
+  doc['findings'] = [
+    finding('cb-b1',  severity: 'blocker', dim_index: 0),
+    finding('cb-h1',  severity: 'high',    dim_index: 1),
+    finding('cb-h2',  severity: 'high',    dim_index: 2),
+    finding('cb-h3',  severity: 'high',    dim_index: 3),
+    finding('cb-m1',  severity: 'medium',  dim_index: 4),
+    finding('cb-m2',  severity: 'medium',  dim_index: 5),
+    finding('cb-m3',  severity: 'medium',  dim_index: 6),
+    finding('cb-m4',  severity: 'medium',  dim_index: 7),
+    finding('cb-l1',  severity: 'low',     dim_index: 8),
+    finding('cb-l2',  severity: 'low',     dim_index: 9)
+  ]
+  doc['summary']['top_blocker_ids'] = [doc['findings'][0]['id']]
+  write('clean-baseline', doc)
+end
+
+# 2. c1-fires-c7-suppresses — broad decay, C7 applies.
+#    12 findings: 5 high (41.6%) + 1 blocker (8.3%) + 6 medium.
+#    All blockers verified. 12 dims ≤4. risk_score 4.
+def gen_c1_fires_c7_suppresses
+  doc = base('c1-fires-c7-suppresses')
+  doc['summary']['risk_score'] = 4
+  low_dims = ALL_DIMS.first(12).each_with_object({}) { |d, h| h[d] = 3 }
+  doc['scorecards'] = scorecards(low_dims)
+  doc['findings'] = [
+    finding('c1s-b1', severity: 'blocker', dim_index: 0),
+    finding('c1s-h1', severity: 'high',    dim_index: 1),
+    finding('c1s-h2', severity: 'high',    dim_index: 2),
+    finding('c1s-h3', severity: 'high',    dim_index: 3),
+    finding('c1s-h4', severity: 'high',    dim_index: 4),
+    finding('c1s-h5', severity: 'high',    dim_index: 5),
+    finding('c1s-m1', severity: 'medium',  dim_index: 6),
+    finding('c1s-m2', severity: 'medium',  dim_index: 7),
+    finding('c1s-m3', severity: 'medium',  dim_index: 8),
+    finding('c1s-m4', severity: 'medium',  dim_index: 9),
+    finding('c1s-m5', severity: 'medium',  dim_index: 10),
+    finding('c1s-m6', severity: 'medium',  dim_index: 11)
+  ]
+  doc['summary']['top_blocker_ids'] = [doc['findings'][0]['id']]
+  write('c1-fires-c7-suppresses', doc)
+end
+
+# 3. c1-fires-c7-fails-dims — pouch's case: concentrated breakage.
+#    Same finding shape as #2 but only 5 dims ≤4 → C7 doesn't apply.
+def gen_c1_fires_c7_fails_dims
+  doc = base('c1-fires-c7-fails-dims', project: 'pouch-shaped')
+  doc['summary']['risk_score'] = 4
+  low_dims = ALL_DIMS.first(5).each_with_object({}) { |d, h| h[d] = 3 }
+  doc['scorecards'] = scorecards(low_dims)
+  doc['findings'] = [
+    finding('c1d-b1', severity: 'blocker', dim_index: 0),
+    finding('c1d-h1', severity: 'high',    dim_index: 1),
+    finding('c1d-h2', severity: 'high',    dim_index: 2),
+    finding('c1d-h3', severity: 'high',    dim_index: 3),
+    finding('c1d-h4', severity: 'high',    dim_index: 4),
+    finding('c1d-h5', severity: 'high',    dim_index: 5),
+    finding('c1d-m1', severity: 'medium',  dim_index: 6),
+    finding('c1d-m2', severity: 'medium',  dim_index: 7),
+    finding('c1d-m3', severity: 'medium',  dim_index: 8),
+    finding('c1d-m4', severity: 'medium',  dim_index: 9),
+    finding('c1d-m5', severity: 'medium',  dim_index: 10),
+    finding('c1d-m6', severity: 'medium',  dim_index: 11)
+  ]
+  doc['summary']['top_blocker_ids'] = [doc['findings'][0]['id']]
+  write('c1-fires-c7-fails-dims', doc)
+end
+
+# 4. c2-fires — blocker over-use, no C7.
+#    10 findings: 4 blockers (40%) + 1 high + 5 medium.
+def gen_c2_fires
+  doc = base('c2-fires')
+  doc['summary']['risk_score'] = 5
+  low_dims = ALL_DIMS.first(5).each_with_object({}) { |d, h| h[d] = 3 }
+  doc['scorecards'] = scorecards(low_dims)
+  doc['findings'] = [
+    finding('c2-b1', severity: 'blocker', dim_index: 0),
+    finding('c2-b2', severity: 'blocker', dim_index: 1),
+    finding('c2-b3', severity: 'blocker', dim_index: 2),
+    finding('c2-b4', severity: 'blocker', dim_index: 3),
+    finding('c2-h1', severity: 'high',    dim_index: 4),
+    finding('c2-m1', severity: 'medium',  dim_index: 5),
+    finding('c2-m2', severity: 'medium',  dim_index: 6),
+    finding('c2-m3', severity: 'medium',  dim_index: 7),
+    finding('c2-m4', severity: 'medium',  dim_index: 8),
+    finding('c2-m5', severity: 'medium',  dim_index: 9)
+  ]
+  doc['summary']['top_blocker_ids'] = doc['findings'].first(3).map { |f| f['id'] }
+  write('c2-fires', doc)
+end
+
+# 5. c3-unverified-blocker — C3 fires, C7 cannot apply.
+#    Same broad-decay shape as #2 but the blocker is unverified.
+def gen_c3_unverified_blocker
+  doc = base('c3-unverified-blocker')
+  doc['summary']['risk_score'] = 4
+  low_dims = ALL_DIMS.first(12).each_with_object({}) { |d, h| h[d] = 3 }
+  doc['scorecards'] = scorecards(low_dims)
+  doc['findings'] = [
+    finding('c3-b1', severity: 'blocker', dim_index: 0, unverified: true),
+    finding('c3-h1', severity: 'high',    dim_index: 1),
+    finding('c3-h2', severity: 'high',    dim_index: 2),
+    finding('c3-h3', severity: 'high',    dim_index: 3),
+    finding('c3-h4', severity: 'high',    dim_index: 4),
+    finding('c3-h5', severity: 'high',    dim_index: 5),
+    finding('c3-m1', severity: 'medium',  dim_index: 6),
+    finding('c3-m2', severity: 'medium',  dim_index: 7),
+    finding('c3-m3', severity: 'medium',  dim_index: 8),
+    finding('c3-m4', severity: 'medium',  dim_index: 9),
+    finding('c3-m5', severity: 'medium',  dim_index: 10),
+    finding('c3-m6', severity: 'medium',  dim_index: 11)
+  ]
+  doc['summary']['top_blocker_ids'] = [doc['findings'][0]['id']]
+  write('c3-unverified-blocker', doc)
+end
+
+# 6. c4-phase-mismatch — fix_sequence references finding with mismatched phase.
+def gen_c4_phase_mismatch
+  doc = base('c4-phase-mismatch')
+  doc['summary']['risk_score'] = 7
+  doc['scorecards'] = scorecards
+  f1 = finding('c4-h1', severity: 'high',   phase: 1, dim_index: 0)
+  f2 = finding('c4-m1', severity: 'medium', phase: 1, dim_index: 1)
+  f3 = finding('c4-m2', severity: 'medium', phase: 2, dim_index: 2) # actually phase 2
+  doc['findings'] = [f1, f2, f3]
+  doc['fix_sequence'] = [
+    { 'phase' => 1, 'name' => 'p1', 'estimated_effort' => '1d', 'rationale' => 'r',
+      'finding_ids' => [f1['id'], f3['id']] }, # f3 is phase 2 in finding, but listed in phase 1 here
+    { 'phase' => 2, 'name' => 'p2', 'estimated_effort' => '1d', 'rationale' => 'r',
+      'finding_ids' => [f2['id']] } # f2 is phase 1 in finding, listed in phase 2 here
+  ]
+  write('c4-phase-mismatch', doc)
+end
+
+# 7. c5-scorecard-mismatch — one dimension scored 9 but has 6+ weighted findings;
+# rest of the report is otherwise calibrated (no C1/C2/C3 noise).
+# Findings: 1 blocker + 3 high all on `security-and-authz` (weighted 4+9 = 13)
+# plus 6 medium on other dimensions to keep blocker_pct/high_pct under thresholds.
+def gen_c5_scorecard_mismatch
+  doc = base('c5-scorecard-mismatch')
+  doc['summary']['risk_score'] = 6
+  overrides = { 'security-and-authz' => 9 }
+  doc['scorecards'] = scorecards(overrides)
+  doc['findings'] = [
+    finding('c5-b1', severity: 'blocker', dim: 'security-and-authz'),
+    finding('c5-h1', severity: 'high',    dim: 'security-and-authz'),
+    finding('c5-h2', severity: 'high',    dim: 'security-and-authz'),
+    finding('c5-h3', severity: 'high',    dim: 'security-and-authz'),
+    finding('c5-m1', severity: 'medium',  dim_index: 1),
+    finding('c5-m2', severity: 'medium',  dim_index: 2),
+    finding('c5-m3', severity: 'medium',  dim_index: 3),
+    finding('c5-m4', severity: 'medium',  dim_index: 4),
+    finding('c5-m5', severity: 'medium',  dim_index: 5),
+    finding('c5-m6', severity: 'medium',  dim_index: 6),
+    finding('c5-m7', severity: 'medium',  dim_index: 7)
+  ]
+  # 11 findings: 1 blocker (9.1%), 3 high (27.3%), 7 medium → no C1/C2 fires.
+  # security-and-authz weighted = 4 + 3*3 = 13 → expected band 0–2;
+  # actual score 9 → delta 7 > 2 → C5 fires on this single dimension.
+  doc['summary']['top_blocker_ids'] = [doc['findings'][0]['id']]
+  write('c5-scorecard-mismatch', doc)
+end
+
+# All five together (bin/run-self-check called with --coverage-mtime
+# generates C6 in the test runner; no fixture file needed for that.)
+
+gen_clean_baseline
+gen_c1_fires_c7_suppresses
+gen_c1_fires_c7_fails_dims
+gen_c2_fires
+gen_c3_unverified_blocker
+gen_c4_phase_mismatch
+gen_c5_scorecard_mismatch
+
+puts 'done — 7 fixtures generated. C6 (stale coverage) is exercised at test time via --coverage-mtime.'

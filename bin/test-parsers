@@ -176,6 +176,24 @@ else
 end
 puts ''
 
+# --- bin/test-calibration -------------------------------------------------
+# Calibration regression suite. Asserts that bin/run-self-check produces the
+# expected fires on each frozen fixture. Catches threshold drift that would
+# otherwise silently change discrimination behavior.
+puts 'calibration suite:'
+out, _err, status = Open3.capture3(File.join(BIN, 'test-calibration'))
+checks += 1
+if status.success?
+  # Echo the trailing summary line for visibility
+  summary = out.lines.find { |l| l.match?(/\A\d+\/\d+ calibration checks passed/) }
+  puts "  [#{PASS}] bin/test-calibration: #{summary&.strip || 'all green'}"
+else
+  failures += 1
+  puts "  [#{FAIL}] bin/test-calibration: exit #{status.exitstatus}"
+  out.lines.last(15).each { |l| puts "         #{l.chomp}" }
+end
+puts ''
+
 # ---------------------------------------------------------------------------
 puts '---'
 puts "#{checks - failures}/#{checks} checks passed"
